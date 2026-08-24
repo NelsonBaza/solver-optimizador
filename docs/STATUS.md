@@ -27,7 +27,7 @@
 | **Benchmark A (AMPL + HiGHS)** | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | **PASS** | Matriz de pagos validada, rangos $\Delta Z=(610, 89)$, 6 ejecuciones ponderadas, 3 soluciones únicas no dominadas verificadas contra referencia académica. |
 | **Benchmark A (Pyomo + HiGHS)** | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | **PASS** | Coincidencia matemática exacta al 100% con AMPL y referencia. Matriz de pagos, rangos, 6 pesos, 3 soluciones únicas no dominadas idénticas. |
 | **Comparación de Backends** | [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](BENCHMARK_A_BACKEND_COMPARISON.md) | **PASS** | Evaluación en 12 criterios y 8 dimensiones. Pyomo adoptado como backend exacto provisional (+5.7 pts). |
-| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 49 pruebas unitarias aprobadas (mono MAX/MIN, bio MAX/MAX, MAX/MIN, MIN/MIN, infactibilidad, no acotamiento, validación de pesos, rango nulo, nombres especiales, entradas no finitas, firmas deterministas, interpretación MAX/MIN, persistencia JSON con normalización canónica y filtrado de filas dinámicas vacías, gráficos para $N \ge 1$, nombres personalizados y modelo hidroeléctrico 24 variables). |
+| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 53 pruebas unitarias aprobadas (mono MAX/MIN, bio MAX/MAX, MAX/MIN, MIN/MIN, infactibilidad, no acotamiento, validación de pesos, rango nulo, nombres especiales, entradas no finitas, firmas deterministas, interpretación MAX/MIN, persistencia JSON con normalización canónica y filtrado de filas dinámicas vacías, gráficos para $N \ge 1$, nombres personalizados, modelo hidroeléctrico 24 variables e integridad estática y dinámica de Streamlit con AppTest). |
 | **MVP Interfaz Web** | `streamlit run streamlit_app.py` | **PASS** | Interfaz funcional y sincronizada con carga atómica de modelos, normalización canónica de restricciones con filtrado de filas dinámicas vacías, nombres personalizados hasta 100 variables, gráficos de variables y holguras para $N$ dimensiones, detección de desactualización e interpretación automática. |
 
 ---
@@ -41,9 +41,10 @@
 | [`tests/test_lp_core.py`](../tests/test_lp_core.py) | Suite de pruebas unitarias para el motor matemático (`pytest`, 12 tests). |
 | [`tests/test_model_signature.py`](../tests/test_model_signature.py) | Pruebas unitarias para la detección determinista de resultados desactualizados (7 tests). |
 | [`tests/test_interpretation.py`](../tests/test_interpretation.py) | Pruebas unitarias para la interpretación matemática automática de resultados (8 tests). |
-| [`tests/test_model_io.py`](../tests/test_model_io.py) | Pruebas unitarias de serialización, deserialización y round-trip hidroeléctrico 8 variables (6 tests). |
+| [`tests/test_model_io.py`](../tests/test_model_io.py) | Pruebas unitarias de serialización, deserialización, normalización y round-trips (10 tests). |
 | [`tests/test_plotting_extended.py`](../tests/test_plotting_extended.py) | Pruebas unitarias de generación de gráficos de variables, holguras y multiobjetivo (4 tests). |
-| [`tests/test_custom_variables.py`](../tests/test_custom_variables.py) | Pruebas unitarias de variables personalizadas, carga atómica y modelo hidroeléctrico completo 24 variables (5 tests). |
+| [`tests/test_custom_variables.py`](../tests/test_custom_variables.py) | Pruebas unitarias de variables personalizadas, carga atómica y modelo hidroeléctrico completo 24 variables (8 tests). |
+| [`tests/test_streamlit_integrity.py`](../tests/test_streamlit_integrity.py) | Pruebas de integridad estática de AST y ejecución dinámica AppTest para Streamlit (4 tests). |
 | [`verify_ampl_highs.py`](../verify_ampl_highs.py) | Script de verificación reproducible del entorno base AMPL + HiGHS. |
 | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | Script ejecutable del Benchmark A con AMPL + HiGHS. |
 | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | Script ejecutable del Benchmark A con Pyomo + HiGHS (APPSI). |

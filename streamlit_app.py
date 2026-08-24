@@ -37,6 +37,7 @@ from solver_optimizador.interpretation import (
 from solver_optimizador.model_io import (
     serialize_model,
     deserialize_model,
+    normalize_constraints,
     sanitize_filename,
     SCHEMA_VERSION,
 )
