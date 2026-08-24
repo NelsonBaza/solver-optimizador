@@ -27,8 +27,8 @@
 | **Benchmark A (AMPL + HiGHS)** | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | **PASS** | Matriz de pagos validada, rangos $\Delta Z=(610, 89)$, 6 ejecuciones ponderadas, 3 soluciones únicas no dominadas verificadas contra referencia académica. |
 | **Benchmark A (Pyomo + HiGHS)** | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | **PASS** | Coincidencia matemática exacta al 100% con AMPL y referencia. Matriz de pagos, rangos, 6 pesos, 3 soluciones únicas no dominadas idénticas. |
 | **Comparación de Backends** | [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](BENCHMARK_A_BACKEND_COMPARISON.md) | **PASS** | Evaluación en 12 criterios y 8 dimensiones. Pyomo adoptado como backend exacto provisional (+5.7 pts). |
-| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 19 pruebas unitarias aprobadas (mono MAX/MIN, bio MAX/MAX, MAX/MIN, MIN/MIN, infactibilidad, no acotamiento, validación de pesos, rango nulo, nombres especiales, entradas no finitas, gráficos y firmas deterministas). |
-| **MVP Interfaz Web** | `streamlit run streamlit_app.py` | **PASS** | Interfaz funcional y sincronizada para LP mono y biobjetivo con tablas dinámicas, gráficos 2D y detección de resultados desactualizados. |
+| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 24 pruebas unitarias aprobadas (mono MAX/MIN, bio MAX/MAX, MAX/MIN, MIN/MIN, infactibilidad, no acotamiento, validación de pesos, rango nulo, nombres especiales, entradas no finitas, gráficos, firmas deterministas e interpretación automática). |
+| **MVP Interfaz Web** | `streamlit run streamlit_app.py` | **PASS** | Interfaz funcional y sincronizada para LP mono y biobjetivo con tablas dinámicas, gráficos 2D optimizados, detección de resultados desactualizados e interpretación automática. |
 
 ---
 
@@ -36,10 +36,11 @@
 
 | Archivo / Carpeta | Descripción |
 | :--- | :--- |
-| [`src/solver_optimizador/`](../src/solver_optimizador/) | Paquete principal del motor matemático desacoplado (`lp_models`, `lp_solver`, `multiobjective`, `plotting`, `signature`). |
+| [`src/solver_optimizador/`](../src/solver_optimizador/) | Paquete principal del motor matemático desacoplado (`lp_models`, `lp_solver`, `multiobjective`, `plotting`, `signature`, `interpretation`). |
 | [`streamlit_app.py`](../streamlit_app.py) | Aplicación web interactiva Streamlit. |
 | [`tests/test_lp_core.py`](../tests/test_lp_core.py) | Suite de pruebas unitarias para el motor matemático (`pytest`, 12 tests). |
 | [`tests/test_model_signature.py`](../tests/test_model_signature.py) | Pruebas unitarias para la detección determinista de resultados desactualizados (7 tests). |
+| [`tests/test_interpretation.py`](../tests/test_interpretation.py) | Pruebas unitarias para la interpretación matemática automática de resultados (5 tests). |
 | [`verify_ampl_highs.py`](../verify_ampl_highs.py) | Script de verificación reproducible del entorno base AMPL + HiGHS. |
 | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | Script ejecutable del Benchmark A con AMPL + HiGHS. |
 | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | Script ejecutable del Benchmark A con Pyomo + HiGHS (APPSI). |
@@ -56,6 +57,7 @@
 | [`pyproject.toml`](../pyproject.toml) | Configuración de empaquetado con dependencias validadas y configuración de `pytest`. |
 | [`.gitignore`](../.gitignore) | Exclusiones de Git (entornos virtuales, temporales de solvers, logs, cachés). |
 | [`README.md`](../README.md) | Documento principal con alcance, guía de inicio del MVP, licencias y limitaciones. |
+| [`docs/RESULT_INTERPRETATION_AND_PLOT_REFINEMENT.md`](RESULT_INTERPRETATION_AND_PLOT_REFINEMENT.md) | Informe técnico de mejora de gráficos e interpretación base automática. |
 | [`docs/UI_UX_REFINEMENT.md`](UI_UX_REFINEMENT.md) | Informe técnico de refinamiento UI/UX y modernización de Streamlit. |
 | [`docs/UI_MVP_HARDENING.md`](UI_MVP_HARDENING.md) | Informe técnico de hardening del MVP de interfaz Streamlit y motor matemático. |
 | [`docs/UI_MVP_VALIDATION.md`](UI_MVP_VALIDATION.md) | Informe técnico de validación del MVP de interfaz Streamlit. |

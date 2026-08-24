@@ -91,6 +91,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/STATUS.md`](docs/STATUS.md): Fotografía técnica del estado actual del proyecto.
 * [`docs/DECISIONS.md`](docs/DECISIONS.md): Registro histórico de decisiones arquitectónicas (ADR-001 a ADR-007).
 * [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](docs/BENCHMARK_A_BACKEND_COMPARISON.md): Comparativa exhaustiva Pyomo vs. AMPL.
+* [`docs/RESULT_INTERPRETATION_AND_PLOT_REFINEMENT.md`](docs/RESULT_INTERPRETATION_AND_PLOT_REFINEMENT.md): Informe técnico de mejora de gráficos e interpretación base automática.
 * [`docs/UI_UX_REFINEMENT.md`](docs/UI_UX_REFINEMENT.md): Informe de refinamiento UI/UX y modernización en Streamlit.
 * [`docs/UI_MVP_HARDENING.md`](docs/UI_MVP_HARDENING.md): Informe de hardening técnico de la interfaz y motor matemático.
 * [`docs/UI_MVP_VALIDATION.md`](docs/UI_MVP_VALIDATION.md): Informe de validación del MVP de interfaz.

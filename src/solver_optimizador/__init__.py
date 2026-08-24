@@ -19,6 +19,7 @@ from .lp_models import (
 from .lp_solver import solve_lp
 from .multiobjective import solve_biobjective_weighted
 from .signature import build_model_signature
+from .interpretation import interpret_mono_solution, interpret_biobjective_solution
 
 __all__ = [
     "Sense",
@@ -33,6 +34,8 @@ __all__ = [
     "MultiobjectiveSolution",
     "is_finite_number",
     "build_model_signature",
+    "interpret_mono_solution",
+    "interpret_biobjective_solution",
     "solve_lp",
     "solve_biobjective_weighted",
 ]

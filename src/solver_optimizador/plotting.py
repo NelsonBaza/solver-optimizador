@@ -1,5 +1,6 @@
 """
 Modulo de generacion de graficos para el espacio de variables (2D) y espacio de objetivos (2D).
+Optimizado para maxima legibilidad, separacion de anotaciones y ausencia de superposiciones.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -59,8 +60,8 @@ def plot_feasible_region_2d(
 
     max_x = max(p[0] for p in points) if points else 10.0
     max_y = max(p[1] for p in points) if points else 10.0
-    limit_x = max(max_x * 1.3, 10.0)
-    limit_y = max(max_y * 1.3, 10.0)
+    limit_x = max(max_x * 1.25, 10.0)
+    limit_y = max(max_y * 1.30, 10.0)
 
     # Hallar intersecciones de todas las lineas (incluyendo x1=0, x2=0)
     all_lines_eq = [(1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]  # x1=0, x2=0
@@ -99,7 +100,7 @@ def plot_feasible_region_2d(
             if not any(abs(px - fx) < tol and abs(py - fy) < tol for fx, fy in feasible_pts):
                 feasible_pts.append((px, py))
 
-    # Crear figura con estilo limpio
+    # Crear figura con proporciones legibles
     fig, ax = plt.subplots(figsize=(7.5, 5.5), dpi=150)
 
     # Trazar lineas de restriccion
@@ -124,7 +125,7 @@ def plot_feasible_region_2d(
                        linewidth=1.5, alpha=0.7, label="Region Factible", zorder=2)
         ax.add_patch(poly)
 
-    # Dibujar puntos de soluciones
+    # Dibujar puntos de soluciones con offsets diferenciados
     if solutions:
         for idx, sol in enumerate(solutions):
             sol_id = sol.get("id", f"S{idx+1}")
@@ -134,21 +135,26 @@ def plot_feasible_region_2d(
                 py = x_dict[v2]
                 if is_finite_number(px) and is_finite_number(py):
                     ax.scatter(px, py, color="#d62728", s=90, zorder=5, edgecolor="black")
+                    
+                    # Offset dinamico para evitar solapamientos
+                    off_x = 12 if px < limit_x * 0.7 else -70
+                    off_y = 12 if py < limit_y * 0.7 else -20
+                    
                     ax.annotate(
                         f"{sol_id} ({px:.1f}, {py:.1f})",
-                        (px, py), textcoords="offset points", xytext=(10, 10),
+                        (px, py), textcoords="offset points", xytext=(off_x, off_y),
                         fontsize=8.5, fontweight="bold",
-                        bbox=dict(boxstyle="round,pad=0.3", fc="#ffffff", ec="#333333", alpha=0.9),
-                        arrowprops=dict(arrowstyle="->", color="#333333"),
+                        bbox=dict(boxstyle="round,pad=0.3", fc="#ffffff", ec="#333333", alpha=0.92),
+                        arrowprops=dict(arrowstyle="->", color="#333333", lw=0.9),
                     )
 
     ax.set_xlim(-limit_x * 0.05, limit_x)
     ax.set_ylim(-limit_y * 0.05, limit_y)
     ax.set_xlabel(f"Variable ${v1}$", fontsize=10, fontweight="bold")
     ax.set_ylabel(f"Variable ${v2}$", fontsize=10, fontweight="bold")
-    ax.set_title(title, fontsize=11, fontweight="bold", pad=10)
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=16)
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="upper right", fontsize=8.0)
+    ax.legend(loc="upper right", fontsize=8.0, framealpha=0.9)
     fig.tight_layout()
 
     return fig
@@ -163,32 +169,65 @@ def plot_objective_space_2d(
 ) -> plt.Figure:
     """
     Genera el grafico 2D del espacio de objetivos con la aproximacion discreta de soluciones.
+    Garantiza cajas compactas de texto y amplia separacion con el titulo y la leyenda.
     """
     fig, ax = plt.subplots(figsize=(7.5, 5.5), dpi=150)
 
     nd_solutions = [s for s in unique_solutions if "no dominada" in s.get("pareto_status", "").lower()]
     d_solutions = [s for s in unique_solutions if "no dominada" not in s.get("pareto_status", "").lower()]
+    all_sols = nd_solutions + d_solutions
+
+    # Calcular limites de ejes con margen holgado
+    if all_sols:
+        z1_vals = [s["Z1"] for s in all_sols if is_finite_number(s.get("Z1"))]
+        z2_vals = [s["Z2"] for s in all_sols if is_finite_number(s.get("Z2"))]
+        min_z1, max_z1 = min(z1_vals), max(z1_vals)
+        min_z2, max_z2 = min(z2_vals), max(z2_vals)
+        span_z1 = max_z1 - min_z1 if max_z1 > min_z1 else max(abs(max_z1), 10.0)
+        span_z2 = max_z2 - min_z2 if max_z2 > min_z2 else max(abs(max_z2), 10.0)
+        
+        ax.set_xlim(min_z1 - span_z1 * 0.12, max_z1 + span_z1 * 0.20)
+        ax.set_ylim(min_z2 - span_z2 * 0.15, max_z2 + span_z2 * 0.24)
 
     # Trazar linea conectora entre soluciones no dominadas (ordenadas por Z1)
     if nd_solutions:
         sorted_nd = sorted(nd_solutions, key=lambda s: s["Z1"])
         ax.plot([s["Z1"] for s in sorted_nd], [s["Z2"] for s in sorted_nd],
                 color="#1f77b4", linestyle="--", linewidth=1.5,
-                label="Aproximacion discreta obtenida (no dominadas)", zorder=2)
+                label="Aproximacion discreta (no dominadas)", zorder=2)
 
-    # Dibujar puntos no dominados
-    for s in nd_solutions:
+    # Dibujar puntos no dominados con formato compacto de pesos
+    sorted_all_nd = sorted(nd_solutions, key=lambda s: s["Z1"]) if nd_solutions else []
+    n_nd = len(sorted_all_nd)
+
+    for idx, s in enumerate(sorted_all_nd):
         if is_finite_number(s.get("Z1")) and is_finite_number(s.get("Z2")):
             ax.scatter(s["Z1"], s["Z2"], color="#d62728", s=100, zorder=4, edgecolor="black")
-            weights_str = "\n".join(
-                f"a=({w['alpha1']:.2g}, {w['alpha2']:.2g})" for w in s.get("generated_by_weights", [])
-            )
+            
+            # Formato compacto de pesos en una sola linea
+            weights_list = s.get("generated_by_weights", [])
+            w_formatted = ", ".join(f"({w['alpha1']:.2g}, {w['alpha2']:.2g})" for w in weights_list)
+            peso_label = "Pesos" if len(weights_list) > 1 else "Peso"
+            
+            text_label = f"Solucion {s['id']}\nZ = ({s['Z1']:.1f}, {s['Z2']:.1f})\n{peso_label}: {w_formatted}"
+            
+            # Ubicacion inteligente del offset segun posicion del punto
+            if idx == 0 and n_nd > 1:
+                # Punto extremo izquierdo (alto Z2, bajo Z1)
+                xytext = (15, 12)
+            elif idx == n_nd - 1 and n_nd > 1:
+                # Punto extremo derecho (alto Z1, bajo Z2)
+                xytext = (-130, 12)
+            else:
+                # Punto intermedio
+                xytext = (15, 15)
+
             ax.annotate(
-                f"Solucion {s['id']}\nZ=({s['Z1']:.1f}, {s['Z2']:.1f})\n{weights_str}",
-                (s["Z1"], s["Z2"]), textcoords="offset points", xytext=(12, 10),
-                fontsize=8.5,
-                bbox=dict(boxstyle="round,pad=0.3", fc="#f8f9fa", ec="#cccccc", alpha=0.9),
-                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0.1", color="#666666"),
+                text_label,
+                (s["Z1"], s["Z2"]), textcoords="offset points", xytext=xytext,
+                fontsize=8.0,
+                bbox=dict(boxstyle="round,pad=0.35", fc="#ffffff", ec="#999999", alpha=0.93),
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0.08", color="#555555", lw=0.9),
             )
 
     # Dibujar puntos dominados si los hubiera
@@ -196,10 +235,10 @@ def plot_objective_space_2d(
         if is_finite_number(s.get("Z1")) and is_finite_number(s.get("Z2")):
             ax.scatter(s["Z1"], s["Z2"], color="#7f7f7f", s=70, zorder=3, marker="s", edgecolor="black")
             ax.annotate(
-                f"Solucion {s['id']} (Dominada)\nZ=({s['Z1']:.1f}, {s['Z2']:.1f})",
-                (s["Z1"], s["Z2"]), textcoords="offset points", xytext=(12, -15),
-                fontsize=8.0,
-                bbox=dict(boxstyle="round,pad=0.2", fc="#eeeeee", ec="#aaaaaa", alpha=0.8),
+                f"Solucion {s['id']} (Dominada)\nZ = ({s['Z1']:.1f}, {s['Z2']:.1f})",
+                (s["Z1"], s["Z2"]), textcoords="offset points", xytext=(12, -20),
+                fontsize=7.5,
+                bbox=dict(boxstyle="round,pad=0.25", fc="#eeeeee", ec="#aaaaaa", alpha=0.85),
             )
 
     s1_str = "MAX" if z1_sense == Sense.MAXIMIZE else "MIN"
@@ -207,9 +246,10 @@ def plot_objective_space_2d(
 
     ax.set_xlabel(f"Objetivo {z1_name} [{s1_str}]", fontsize=10, fontweight="bold")
     ax.set_ylabel(f"Objetivo {z2_name} [{s2_str}]", fontsize=10, fontweight="bold")
-    ax.set_title("Espacio de objetivos: Aproximacion discreta de soluciones", fontsize=11, fontweight="bold", pad=10)
+    ax.set_title("Espacio de objetivos: Aproximacion discreta de soluciones", fontsize=11, fontweight="bold", pad=16)
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="best", fontsize=8.0)
+    # Colocar la leyenda en la esquina inferior izquierda donde no compite con la frontera
+    ax.legend(loc="lower left", fontsize=8.0, framealpha=0.9)
     fig.tight_layout()
 
     return fig

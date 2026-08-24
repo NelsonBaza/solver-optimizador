@@ -29,6 +29,10 @@ from solver_optimizador.lp_models import (
 from solver_optimizador.lp_solver import solve_lp
 from solver_optimizador.multiobjective import solve_biobjective_weighted, generate_weight_combinations
 from solver_optimizador.signature import build_model_signature
+from solver_optimizador.interpretation import (
+    interpret_mono_solution,
+    interpret_biobjective_solution,
+)
 from solver_optimizador.plotting import (
     plot_feasible_region_2d,
     plot_objective_space_2d,
@@ -634,12 +638,26 @@ with tab_res:
                         else:
                             st.info("La representacion grafica 2D esta disponible unicamente para problemas de exactamente dos variables.")
 
+                # Interpretacion automatica base monoobjetivo
+                with st.container(border=True):
+                    st.subheader("💡 Interpretacion Base de Resultados")
+                    mono_bullets = interpret_mono_solution(prob, sol)
+                    for b in mono_bullets:
+                        st.markdown(f"- {b}")
+
             else:
                 st.error(f"**{sol.status_message}** ({sol.raw_termination})")
                 if sol.status == SolverStatus.INFEASIBLE:
                     st.warning("No existe ninguna combinacion de variables $(x \\ge 0)$ que satisfaga todas las restricciones simultaneamente.")
                 elif sol.status == SolverStatus.UNBOUNDED:
                     st.warning("El problema no esta acotado en la direccion del objetivo (el valor optimo tiende a infinito).")
+
+                # Interpretacion automatica de infactibilidad / no acotamiento
+                with st.container(border=True):
+                    st.subheader("💡 Diagnostico e Interpretacion del Modelo")
+                    mono_bullets = interpret_mono_solution(prob, sol)
+                    for b in mono_bullets:
+                        st.markdown(f"- {b}")
 
                 with st.expander("Detalles tecnicos del solver"):
                     st.json({
@@ -690,7 +708,7 @@ with tab_res:
                     "⚙️ Diagnostico",
                 ])
 
-                # Subtab 1: Resumen y Matriz de Pagos
+                # Subtab 1: Resumen, Matriz de Pagos e Interpretacion
                 with subtab_res:
                     n_nd = sum(1 for u in sol.unique_solutions if "no dominada" in u["pareto_status"].lower())
                     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
@@ -747,6 +765,13 @@ with tab_res:
                                     "Rango (Delta Z)": st.column_config.NumberColumn(format="%.2f"),
                                 },
                             )
+
+                    # Interpretacion automatica multiobjetivo
+                    with st.container(border=True):
+                        st.subheader("💡 Interpretacion Base del Modelo Multiobjetivo")
+                        bio_bullets = interpret_biobjective_solution(prob, sol)
+                        for b in bio_bullets:
+                            st.markdown(f"- {b}")
 
                 # Subtab 2: Soluciones No Dominadas
                 with subtab_pareto:
