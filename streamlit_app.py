@@ -24,6 +24,7 @@ from solver_optimizador.lp_models import (
     LPProblem,
     BiobjectiveProblem,
     SolverStatus,
+    is_finite_number,
 )
 from solver_optimizador.lp_solver import solve_lp
 from solver_optimizador.multiobjective import solve_biobjective_weighted
@@ -42,9 +43,11 @@ st.set_page_config(
 
 
 # ---------------------------------------------------------------------------
-# Inicializacion de Estado de Sesion
+# Inicializacion y Sincronizacion de Estado de Sesion
 # ---------------------------------------------------------------------------
 def _init_session_state():
+    if "editor_version" not in st.session_state:
+        st.session_state.editor_version = 0
     if "problem_type" not in st.session_state:
         st.session_state.problem_type = "Biobjetivo"
     if "num_vars" not in st.session_state:
@@ -76,7 +79,26 @@ def _init_session_state():
         st.session_state.custom_a1 = 0.5
 
 
+def _clear_widget_keys():
+    """Limpia las claves de widgets para evitar desincronizacion con session_state."""
+    keys_to_clear = [
+        "radio_prob_type",
+        "num_vars_input",
+        "mono_sense_select",
+        "bio_sense1_select",
+        "bio_sense2_select",
+        "mo_mode_radio",
+        "num_weights_slider",
+        "custom_a1_slider",
+    ]
+    for k in list(st.session_state.keys()):
+        if k.startswith("mono_c_") or k.startswith("bio_c1_") or k.startswith("bio_c2_") or k in keys_to_clear:
+            del st.session_state[k]
+
+
 def _load_example_mono():
+    _clear_widget_keys()
+    st.session_state.editor_version += 1
     st.session_state.problem_type = "Monoobjetivo"
     st.session_state.num_vars = 2
     st.session_state.var_names = ["x1", "x2"]
@@ -90,6 +112,8 @@ def _load_example_mono():
 
 
 def _load_example_bio():
+    _clear_widget_keys()
+    st.session_state.editor_version += 1
     st.session_state.problem_type = "Biobjetivo"
     st.session_state.num_vars = 2
     st.session_state.var_names = ["x1", "x2"]
@@ -118,34 +142,36 @@ with st.sidebar:
     st.subheader("📚 Ejemplos Precargados")
     col_ex1, col_ex2 = st.columns(2)
     with col_ex1:
-        if st.button("Ejemplo 1 (Mono)", help="MAX Z = 3x1 + 2x2"):
+        if st.button("Ejemplo 1 (Mono)", help="MAX Z = 3x1 + 2x2", use_container_width=True):
             _load_example_mono()
             st.rerun()
     with col_ex2:
-        if st.button("Benchmark A (Bio)", help="Benchmark A: MAX Z1, MAX Z2"):
+        if st.button("Benchmark A (Bio)", help="Benchmark A: MAX Z1, MAX Z2", use_container_width=True):
             _load_example_bio()
             st.rerun()
 
     st.markdown("---")
     st.subheader("1. Tipo de Problema")
+    prob_type_index = 0 if st.session_state.problem_type == "Monoobjetivo" else 1
     prob_type = st.radio(
         "Modalidad de optimizacion:",
         options=["Monoobjetivo", "Biobjetivo"],
-        index=0 if st.session_state.problem_type == "Monoobjetivo" else 1,
+        index=prob_type_index,
         key="radio_prob_type",
     )
     st.session_state.problem_type = prob_type
 
     st.subheader("2. Variables de Decision")
-    st.caption("Todas las variables son continuas y no negativas ($x_i \\ge 0$).")
+    st.caption("Variables continuas no negativas ($x_i \\ge 0$).")
     num_vars = st.number_input(
         "Numero de variables:",
         min_value=1,
         max_value=10,
-        value=st.session_state.num_vars,
+        value=int(st.session_state.num_vars),
         step=1,
+        key="num_vars_input",
     )
-    st.session_state.num_vars = num_vars
+    st.session_state.num_vars = int(num_vars)
 
     # Actualizar nombres de variables
     var_names = [f"x{i+1}" for i in range(num_vars)]
@@ -175,18 +201,31 @@ with col_obj:
 
     if st.session_state.problem_type == "Monoobjetivo":
         st.markdown("**Objetivo Lineal $Z$:**")
-        col_s, col_l = st.columns([1, 2])
+        col_s, _ = st.columns([1, 2])
         with col_s:
-            sense_str = st.selectbox("Sentido:", ["Maximizar", "Minimizar"], key="mono_sense_select")
-        
+            sense_idx = 0 if st.session_state.obj_sense == "Maximizar" else 1
+            sense_str = st.selectbox(
+                "Sentido:",
+                ["Maximizar", "Minimizar"],
+                index=sense_idx,
+                key="mono_sense_select",
+            )
+            st.session_state.obj_sense = sense_str
+
         st.markdown("**Coeficientes de $Z$:**")
         cols_c = st.columns(len(var_names))
         obj_coeffs = {}
         for i, v in enumerate(var_names):
             with cols_c[i]:
-                default_val = st.session_state.obj_coeffs.get(v, 1.0)
-                val = st.number_input(f"Coef. ${v}$:", value=float(default_val), step=1.0, key=f"mono_c_{v}")
+                default_val = float(st.session_state.obj_coeffs.get(v, 1.0))
+                val = st.number_input(
+                    f"Coef. ${v}$:",
+                    value=default_val,
+                    step=1.0,
+                    key=f"mono_c_{v}",
+                )
                 obj_coeffs[v] = val
+        st.session_state.obj_coeffs = obj_coeffs
 
         # Representacion algebraica
         terms = [f"{c:g} {v}" for v, c in obj_coeffs.items() if abs(c) > 1e-7]
@@ -197,49 +236,95 @@ with col_obj:
         st.markdown("#### Objetivo 1 ($Z_1$)")
         col_s1, _ = st.columns([1, 2])
         with col_s1:
-            sense1_str = st.selectbox("Sentido $Z_1$:", ["Maximizar", "Minimizar"], key="bio_sense1_select")
-        
+            sense1_idx = 0 if st.session_state.obj1_sense == "Maximizar" else 1
+            sense1_str = st.selectbox(
+                "Sentido $Z_1$:",
+                ["Maximizar", "Minimizar"],
+                index=sense1_idx,
+                key="bio_sense1_select",
+            )
+            st.session_state.obj1_sense = sense1_str
+
         cols_c1 = st.columns(len(var_names))
         obj1_coeffs = {}
         for i, v in enumerate(var_names):
             with cols_c1[i]:
-                default_val = st.session_state.obj1_coeffs.get(v, 1.0)
-                val = st.number_input(f"Coef. ${v}$ ($Z_1$):", value=float(default_val), step=1.0, key=f"bio_c1_{v}")
+                default_val = float(st.session_state.obj1_coeffs.get(v, 1.0))
+                val = st.number_input(
+                    f"Coef. ${v}$ ($Z_1$):",
+                    value=default_val,
+                    step=1.0,
+                    key=f"bio_c1_{v}",
+                )
                 obj1_coeffs[v] = val
+        st.session_state.obj1_coeffs = obj1_coeffs
 
         st.markdown("#### Objetivo 2 ($Z_2$)")
         col_s2, _ = st.columns([1, 2])
         with col_s2:
-            sense2_str = st.selectbox("Sentido $Z_2$:", ["Maximizar", "Minimizar"], key="bio_sense2_select")
+            sense2_idx = 0 if st.session_state.obj2_sense == "Maximizar" else 1
+            sense2_str = st.selectbox(
+                "Sentido $Z_2$:",
+                ["Maximizar", "Minimizar"],
+                index=sense2_idx,
+                key="bio_sense2_select",
+            )
+            st.session_state.obj2_sense = sense2_str
 
         cols_c2 = st.columns(len(var_names))
         obj2_coeffs = {}
         for i, v in enumerate(var_names):
             with cols_c2[i]:
-                default_val = st.session_state.obj2_coeffs.get(v, 1.0)
-                val = st.number_input(f"Coef. ${v}$ ($Z_2$):", value=float(default_val), step=1.0, key=f"bio_c2_{v}")
+                default_val = float(st.session_state.obj2_coeffs.get(v, 1.0))
+                val = st.number_input(
+                    f"Coef. ${v}$ ($Z_2$):",
+                    value=default_val,
+                    step=1.0,
+                    key=f"bio_c2_{v}",
+                )
                 obj2_coeffs[v] = val
+        st.session_state.obj2_coeffs = obj2_coeffs
 
         # Configuracion Multiobjetivo
         st.markdown("---")
         st.markdown("#### ⚖️ Parametros de Ponderacion")
+        mo_mode_idx = 0 if st.session_state.mo_mode == "Barrido automatico" else 1
         mo_mode = st.radio(
             "Modalidad de ponderacion:",
             options=["Barrido automatico", "Ponderacion unica"],
+            index=mo_mode_idx,
             horizontal=True,
             key="mo_mode_radio",
         )
+        st.session_state.mo_mode = mo_mode
+
         if mo_mode == "Barrido automatico":
-            num_weights = st.slider("Numero de combinaciones $(\\alpha_1, \\alpha_2)$:", min_value=2, max_value=21, value=6, step=1)
+            num_weights = st.slider(
+                "Numero de combinaciones $(\\alpha_1, \\alpha_2)$:",
+                min_value=2,
+                max_value=21,
+                value=int(st.session_state.num_weights),
+                step=1,
+                key="num_weights_slider",
+            )
+            st.session_state.num_weights = num_weights
         else:
-            custom_a1 = st.slider("Peso $\\alpha_1$ (para $Z_1$):", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+            custom_a1 = st.slider(
+                "Peso $\\alpha_1$ (para $Z_1$):",
+                min_value=0.0,
+                max_value=1.0,
+                value=float(st.session_state.custom_a1),
+                step=0.05,
+                key="custom_a1_slider",
+            )
+            st.session_state.custom_a1 = custom_a1
             custom_a2 = round(1.0 - custom_a1, 4)
             st.info(f"$\\alpha_1 = {custom_a1:.2f}, \\quad \\alpha_2 = {custom_a2:.2f}$")
 
         with st.expander("ℹ️ Metodo de Normalizacion"):
             st.markdown(
                 """
-                Se utiliza la normalizacion basada en la **matriz de pagos**:
+                Se utiliza la normalizacion por rangos a partir de la **matriz de pagos**:
                 $$\\text{Rango } \\Delta Z_k = Z_{k,\\max} - Z_{k,\\min}$$
                 $$W = \\alpha_1 \\frac{Z_1}{\\Delta Z_1} + \\alpha_2 \\frac{Z_2}{\\Delta Z_2}$$
                 *(ajustando el signo negativo en caso de minimizacion).*
@@ -260,7 +345,7 @@ with col_con:
             "RHS": float(c_dict.get("rhs", 10.0)),
         }
         for v in var_names:
-            row[v] = float(c_dict.get(v, 1.0))
+            row[v] = float(c_dict.get(v, 1.0 if v in ("x1", "x2") else 0.0))
         current_data.append(row)
 
     df_constraints = pd.DataFrame(current_data)
@@ -280,7 +365,7 @@ with col_con:
         num_rows="dynamic",
         use_container_width=True,
         column_config=col_config,
-        key="constraints_editor",
+        key=f"constraints_editor_{st.session_state.editor_version}",
     )
 
 
@@ -297,7 +382,6 @@ with col_btn:
 # Logica de Resolucion y Presentacion de Resultados
 # ---------------------------------------------------------------------------
 if btn_solve:
-    # 1. Validar y construir lista de restricciones
     constraints_list: List[LinearConstraint] = []
     has_validation_error = False
 
@@ -318,16 +402,16 @@ if btn_solve:
                 break
 
             rhs_val = row.get("RHS")
-            if pd.isna(rhs_val):
-                st.error(f"❌ La restriccion '{c_name}' no tiene un valor valido en el lado derecho (RHS).")
+            if not is_finite_number(rhs_val):
+                st.error(f"❌ La restriccion '{c_name}' no tiene un valor numerico finito en el lado derecho (RHS): {rhs_val}")
                 has_validation_error = True
                 break
 
             c_coeffs = {}
             for v in var_names:
                 c_val = row.get(v)
-                if pd.isna(c_val):
-                    st.error(f"❌ Falta el coeficiente de '{v}' en la restriccion '{c_name}'.")
+                if not is_finite_number(c_val):
+                    st.error(f"❌ El coeficiente de '{v}' en la restriccion '{c_name}' no es un numero finito: {c_val}")
                     has_validation_error = True
                     break
                 c_coeffs[v] = float(c_val)
@@ -351,10 +435,10 @@ if btn_solve:
         # CASO 1: MONOOBJETIVO
         # -------------------------------------------------------------------
         if st.session_state.problem_type == "Monoobjetivo":
-            sense_enum = Sense.from_str(sense_str)
+            sense_enum = Sense.from_str(st.session_state.obj_sense)
             problem_mono = LPProblem(
                 variables=var_names,
-                objective=LinearObjective("Z", sense_enum, obj_coeffs),
+                objective=LinearObjective("Z", sense_enum, st.session_state.obj_coeffs),
                 constraints=constraints_list,
             )
 
@@ -364,7 +448,6 @@ if btn_solve:
             if sol_mono.status == SolverStatus.OPTIMAL:
                 st.success(f"✅ **{sol_mono.status_message}** (Tiempo de solve: {sol_mono.execution_time_sec*1000:.1f} ms)")
 
-                # Metricas clave
                 m_cols = st.columns(1 + len(var_names))
                 with m_cols[0]:
                     st.metric(label="Valor Optimo $Z^*$", value=f"{sol_mono.objective_value:.4f}")
@@ -385,7 +468,6 @@ if btn_solve:
                     })
                 st.dataframe(pd.DataFrame(con_data), use_container_width=True)
 
-                # Grafico 2D si hay 2 variables
                 if len(var_names) == 2:
                     st.markdown("#### 🗺️ Region Factible y Vertice Optimo")
                     fig_feas = plot_feasible_region_2d(
@@ -416,23 +498,22 @@ if btn_solve:
         # CASO 2: BIOBJETIVO
         # -------------------------------------------------------------------
         else:
-            sense1_enum = Sense.from_str(sense1_str)
-            sense2_enum = Sense.from_str(sense2_str)
+            sense1_enum = Sense.from_str(st.session_state.obj1_sense)
+            sense2_enum = Sense.from_str(st.session_state.obj2_sense)
 
             problem_bio = BiobjectiveProblem(
                 variables=var_names,
-                objective1=LinearObjective("Z1", sense1_enum, obj1_coeffs),
-                objective2=LinearObjective("Z2", sense2_enum, obj2_coeffs),
+                objective1=LinearObjective("Z1", sense1_enum, st.session_state.obj1_coeffs),
+                objective2=LinearObjective("Z2", sense2_enum, st.session_state.obj2_coeffs),
                 constraints=constraints_list,
             )
 
-            # Preparar configuracion de pesos
             weights_param = None
             num_comb_param = None
-            if mo_mode == "Barrido automatico":
-                num_comb_param = num_weights
+            if st.session_state.mo_mode == "Barrido automatico":
+                num_comb_param = int(st.session_state.num_weights)
             else:
-                weights_param = [(custom_a1, custom_a2)]
+                weights_param = [(float(st.session_state.custom_a1), round(1.0 - float(st.session_state.custom_a1), 4))]
 
             with st.spinner("Ejecutando evaluacion biobjetivo (Pyomo + HiGHS)..."):
                 sol_bio = solve_biobjective_weighted(
@@ -441,14 +522,33 @@ if btn_solve:
                     num_combinations=num_comb_param,
                 )
 
+            # Caso de fallo en optimos individuales o rango nulo
             if not sol_bio.unique_solutions:
-                st.error("⚠️ No se pudieron obtener soluciones optimas para los objetivos individuales.")
+                st.warning("⚠️ **No se pudo completar el barrido ponderado.**")
                 for note in sol_bio.notes:
-                    st.warning(note)
+                    st.info(f"📌 {note}")
+
+                if sol_bio.payoff_matrix:
+                    st.markdown("#### Matriz de Pagos Obtenida:")
+                    pm_data = [
+                        {
+                            "Optimo Individual": "Optimo Z1",
+                            "Z1 Evaluado": sol_bio.payoff_matrix["opt_Z1"]["Z1"],
+                            "Z2 Evaluado": sol_bio.payoff_matrix["opt_Z1"]["Z2"],
+                            "Variables": str(sol_bio.payoff_matrix["opt_Z1"]["x"]),
+                        },
+                        {
+                            "Optimo Individual": "Optimo Z2",
+                            "Z1 Evaluado": sol_bio.payoff_matrix["opt_Z2"]["Z1"],
+                            "Z2 Evaluado": sol_bio.payoff_matrix["opt_Z2"]["Z2"],
+                            "Variables": str(sol_bio.payoff_matrix["opt_Z2"]["x"]),
+                        },
+                    ]
+                    st.dataframe(pd.DataFrame(pm_data), use_container_width=True)
+
             else:
                 st.success("✅ **Evaluacion Biobjetivo completada con exito**")
 
-                # Pestañas de resultados
                 tab_opt, tab_sweep, tab_pareto, tab_plots = st.tabs([
                     "1. Optimos & Matriz de Pagos",
                     "2. Barrido de Ponderaciones",
@@ -462,13 +562,13 @@ if btn_solve:
                         st.markdown("#### Matriz de Pagos (Payoff Matrix)")
                         pm_data = [
                             {
-                                "Optimo Individual": "Maximizacion/Minimizacion Z1",
+                                "Optimo Individual": f"Optimo Z1 ({sense1_enum.value.upper()})",
                                 "Z1 Evaluado": sol_bio.payoff_matrix["opt_Z1"]["Z1"],
                                 "Z2 Evaluado": sol_bio.payoff_matrix["opt_Z1"]["Z2"],
                                 "Variables": str(sol_bio.payoff_matrix["opt_Z1"]["x"]),
                             },
                             {
-                                "Optimo Individual": "Maximizacion/Minimizacion Z2",
+                                "Optimo Individual": f"Optimo Z2 ({sense2_enum.value.upper()})",
                                 "Z1 Evaluado": sol_bio.payoff_matrix["opt_Z2"]["Z1"],
                                 "Z2 Evaluado": sol_bio.payoff_matrix["opt_Z2"]["Z2"],
                                 "Variables": str(sol_bio.payoff_matrix["opt_Z2"]["x"]),
@@ -497,13 +597,17 @@ if btn_solve:
                             "Corrida": r["run_index"],
                             "alpha1": f"{r['alpha1']:.2f}",
                             "alpha2": f"{r['alpha2']:.2f}",
-                            "Z1": r["Z1"],
-                            "Z2": r["Z2"],
-                            "W (Obj. Ponderado)": f"{r['W']:.4f}",
+                            "Z1": r["Z1"] if r["Z1"] is not None else "-",
+                            "Z2": r["Z2"] if r["Z2"] is not None else "-",
+                            "W (Obj. Ponderado)": f"{r['W']:.4f}" if r["W"] is not None else "-",
                             "Estado": r["status"],
                         }
-                        for v in var_names:
-                            row_dict[v] = r["x"].get(v, "-")
+                        if r["x"]:
+                            for v in var_names:
+                                row_dict[v] = r["x"].get(v, "-")
+                        else:
+                            for v in var_names:
+                                row_dict[v] = "-"
                         runs_table.append(row_dict)
                     st.dataframe(pd.DataFrame(runs_table), use_container_width=True)
 

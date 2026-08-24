@@ -67,14 +67,20 @@ Se ejecutó la suite completa de pruebas unitarias mediante `pytest`:
 ### Resultados de la Suite (`tests/test_lp_core.py`):
 | Identificador de Prueba | Propósito de la Prueba | Resultado | Detalle Matemático Verificado |
 | :--- | :--- | :---: | :--- |
-| `test_single_objective_example` | Ejemplo 1 monoobjetivo | **PASS** | $\text{MAX } Z = 3x_1 + 2x_2 \implies x^* = (2.0, 2.0), Z^* = 10.0$, holguras correctas ($c_1=0, c_2=0, c_3=1$). |
-| `test_biobjective_benchmark_a` | Benchmark A académico biobjetivo | **PASS** | $Z_1^* = (100, 0, 1000, 80)$, $Z_2^* = (0, 130, 390, 169)$, $\Delta Z = (610, 89)$, 6 pesos idénticos, 3 soluciones únicas no dominadas. |
+| `test_single_objective_max` | Ejemplo 1 monoobjetivo MAX | **PASS** | $\text{MAX } Z = 3x_1 + 2x_2 \implies x^* = (2.0, 2.0), Z^* = 10.0$, holguras correctas. |
+| `test_single_objective_min` | Caso A monoobjetivo MIN | **PASS** | $\text{MIN } Z = x_1 + 2x_2 \implies x^* = (3.0, 1.0), Z^* = 5.0$, holguras correctas. |
+| `test_biobjective_benchmark_a` | Benchmark A académico biobjetivo MAX/MAX | **PASS** | $Z_1^* = (100, 0, 1000, 80)$, $Z_2^* = (0, 130, 390, 169)$, $\Delta Z = (610, 89)$, 6 pesos, 3 soluciones únicas no dominadas. |
+| `test_biobjective_max_min` | Caso B biobjetivo MAX/MIN | **PASS** | MAX $2x_1+x_2$, MIN $x_1+3x_2$, óptimos en $(4,0)$ y $(0,0)$, rangos $(8, 4)$, ponderaciones válidas. |
+| `test_biobjective_min_min` | Caso C biobjetivo MIN/MIN | **PASS** | MIN $2x_1+x_2$, MIN $x_1+2x_2$, óptimos en $(0,4)$ y $(4,0)$, rangos $(4, 4)$, no dominadas. |
 | `test_infeasible_problem` | Detección de infactibilidad | **PASS** | Detecta estado `infeasible` sin lanzar excepciones de ejecución. |
 | `test_unbounded_problem` | Detección de no acotamiento | **PASS** | Detecta estado `unbounded` de forma limpia. |
-| `test_weight_combinations_generator` | Generación y validación de pesos | **PASS** | Valida $N \ge 2$, rechaza pesos negativos o cuya suma difiera de 1.0. |
-| `test_model_validation_errors` | Validación de integridad del modelo | **PASS** | Rechaza modelos sin variables, sin restricciones o con variables no declaradas. |
+| `test_invalid_weights_validation` | Generación y validación de pesos | **PASS** | Valida $N \ge 2$, rechaza pesos negativos o cuya suma difiera de 1.0. |
+| `test_zero_range_handling` | Tratamiento de rango nulo ($\Delta Z=0$) | **PASS** | Detiene el barrido de forma controlada sin división por cero ni falsos $W$. |
+| `test_special_constraint_names` | Nombres con caracteres especiales | **PASS** | Soporta `"Demanda ≥ mínima #1"`, `"Capacidad (A+B)"` sin conflictos en Pyomo. |
+| `test_non_finite_inputs_validation` | Validación de entradas numéricas finitas | **PASS** | Rechaza `NaN`, `inf`, `-inf` en objetivos, restricciones y RHS. |
+| `test_plotting_functions` | Robustez de funciones gráficas | **PASS** | Retorna Figure en 2D acotado, None en $>2$ vars y no falla ante degeneraciones. |
 
-**Total:** 6 pruebas ejecutadas, 6 aprobadas (100% PASS en 0.43s).
+**Total:** 12 pruebas ejecutadas, 12 aprobadas (100% PASS en 1.03s).
 
 ---
 
@@ -82,7 +88,8 @@ Se ejecutó la suite completa de pruebas unitarias mediante `pytest`:
 
 * **Cero uso de `eval()` o `exec()`:** Todas las expresiones lineales se construyen programáticamente mediante sumatorias de términos lineales sobre estructuras de datos de Python y objetos `pyo.Var` de Pyomo.
 * **Manejo Seguro de Errores del Solver:** Se configuró `solver.config.load_solution = False` para que problemas infactibles o no acotados devuelvan estados descriptivos amigables en lugar de interrumpir la aplicación con *tracebacks*.
-* **Prevención de División por Cero:** Si un objetivo presenta rango nulo ($\Delta Z_k = 0$) entre los óptimos individuales, el motor aplica un factor unitario y genera una advertencia informativa clara en la interfaz.
+* **Tratamiento Explícito de Rango Nulo:** Si un objetivo presenta rango nulo ($\Delta Z_k \approx 0$) entre los óptimos individuales, el motor no realiza división por cero ni sustitución arbitraria; detiene el barrido ponderado e informa la causa metodológica.
+* **Validación de Números Finitos:** Toda entrada numérica es verificada mediante `is_finite_number()` para rechazar `NaN` o valores infinitos.
 
 ---
 
@@ -96,5 +103,14 @@ Se ejecutó la suite completa de pruebas unitarias mediante `pytest`:
 
 ---
 
-## 6. Problemas Pendientes
-* Ninguno en el alcance del MVP. El código está modularizado, probado al 100% y documentado.
+## 6. Estado y Pendientes
+
+> [!NOTE]
+> El estado actual certifica que el sistema se encuentra **sin defectos críticos conocidos dentro del alcance de las pruebas automatizadas**. Esto no equivale a un producto completamente validado para producción o docencia masiva sin pruebas de usuario previas.
+
+### Pendientes fuera del alcance actual:
+- Pruebas de usuario con ejercicios reales de clase y casos docentes.
+- Validación visual empírica de una mayor variedad de regiones factibles complejas o degeneradas.
+- Implementación de métodos multiobjetivo complementarios ($\varepsilon$-restricciones).
+- Incorporación de variables enteras (MILP) y modelos no lineales (NLP / MINLP).
+

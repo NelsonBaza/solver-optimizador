@@ -14,6 +14,7 @@ from .lp_models import (
     ConstraintResult,
     LPSolution,
     MultiobjectiveSolution,
+    is_finite_number,
 )
 from .lp_solver import solve_lp
 from .multiobjective import solve_biobjective_weighted
@@ -29,6 +30,7 @@ __all__ = [
     "ConstraintResult",
     "LPSolution",
     "MultiobjectiveSolution",
+    "is_finite_number",
     "solve_lp",
     "solve_biobjective_weighted",
 ]

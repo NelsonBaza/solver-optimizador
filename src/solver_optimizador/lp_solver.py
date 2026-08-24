@@ -59,7 +59,7 @@ def solve_lp(problem: LPProblem, tol: float = 1e-6) -> LPSolution:
             con_obj = pyo.Constraint(expr=expr >= c.rhs)
         else:  # EQ
             con_obj = pyo.Constraint(expr=expr == c.rhs)
-        setattr(model, f"c_{i}_{c.name}", con_obj)
+        setattr(model, f"con_{i}", con_obj)
 
     # Objetivo
     obj_expr = sum(

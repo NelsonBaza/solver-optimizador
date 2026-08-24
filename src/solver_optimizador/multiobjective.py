@@ -15,6 +15,7 @@ from .lp_models import (
     SolverStatus,
     Sense,
     Operator,
+    is_finite_number,
 )
 from .lp_solver import solve_lp
 
@@ -56,7 +57,7 @@ def solve_biobjective_weighted(
 
     if res_z1.status != SolverStatus.OPTIMAL:
         return MultiobjectiveSolution(
-            individual_optima={"Z1": res_z1, "Z2": None},
+            individual_optima={"Z1_opt": res_z1, "Z2_opt": None},
             payoff_matrix={},
             normalization_ranges={},
             weighted_runs=[],
@@ -78,7 +79,7 @@ def solve_biobjective_weighted(
 
     if res_z2.status != SolverStatus.OPTIMAL:
         return MultiobjectiveSolution(
-            individual_optima={"Z1": res_z1, "Z2": res_z2},
+            individual_optima={"Z1_opt": res_z1, "Z2_opt": res_z2},
             payoff_matrix={},
             normalization_ranges={},
             weighted_runs=[],
@@ -122,17 +123,6 @@ def solve_biobjective_weighted(
     z2_min = min(z2_val_at_z1, z2_val_at_z2)
     z2_range = z2_max - z2_min
 
-    # Gestion de rango nulo
-    r1_effective = z1_range
-    if z1_range < 1e-7:
-        r1_effective = 1.0
-        notes.append("El rango de Z1 es nulo (Z1 no varia entre optimos individuales). Se fija factor 1.0.")
-
-    r2_effective = z2_range
-    if z2_range < 1e-7:
-        r2_effective = 1.0
-        notes.append("El rango de Z2 es nulo (Z2 no varia entre optimos individuales). Se fija factor 1.0.")
-
     normalization_ranges = {
         "Z1_max": round(z1_max, 6),
         "Z1_min": round(z1_min, 6),
@@ -142,11 +132,47 @@ def solve_biobjective_weighted(
         "Z2_range": round(z2_range, 6),
     }
 
+    # Deteccion estricta de rango nulo
+    if z1_range < 1e-7 or z2_range < 1e-7:
+        msg = (
+            "No es posible aplicar la normalizacion por rangos porque al menos uno de los objetivos tiene rango nulo (Delta Z ~= 0). "
+            "Esto puede indicar que el objetivo es redundante, constante sobre los puntos evaluados o que no existe conflicto observable entre objetivos mediante esta matriz de pagos."
+        )
+        notes.append(msg)
+        return MultiobjectiveSolution(
+            individual_optima={
+                "Z1_opt": {
+                    "x": x_at_z1,
+                    "Z1": round(z1_val_at_z1, 6),
+                    "Z2": round(z2_val_at_z1, 6),
+                    "status": res_z1.status.value,
+                },
+                "Z2_opt": {
+                    "x": x_at_z2,
+                    "Z1": round(z1_val_at_z2, 6),
+                    "Z2": round(z2_val_at_z2, 6),
+                    "status": res_z2.status.value,
+                },
+            },
+            payoff_matrix=payoff_matrix,
+            normalization_ranges=normalization_ranges,
+            weighted_runs=[],
+            unique_solutions=[],
+            pareto_classification={},
+            timing={
+                "individual_optima_sec": round(t_individual, 6),
+                "total_sec": round(time.perf_counter() - t_start, 6),
+            },
+            notes=notes,
+        )
+
     # 5. Determinar lista de pesos
     if weights is None:
         weights_list = generate_weight_combinations(num_combinations or 6)
     else:
         for a1, a2 in weights:
+            if not is_finite_number(a1) or not is_finite_number(a2):
+                raise ValueError(f"Los pesos deben ser numeros finitos: ({a1}, {a2})")
             if a1 < -1e-6 or a2 < -1e-6:
                 raise ValueError(f"Los pesos deben ser no negativos: ({a1}, {a2})")
             if abs(a1 + a2 - 1.0) > 1e-3:
@@ -176,7 +202,7 @@ def solve_biobjective_weighted(
                 con_obj = pyo.Constraint(expr=expr >= c.rhs)
             else:
                 con_obj = pyo.Constraint(expr=expr == c.rhs)
-            setattr(mw, f"c_{i}_{c.name}", con_obj)
+            setattr(mw, f"con_{i}", con_obj)
 
         # Expresiones de Z1 y Z2
         z1_expr = sum(problem.objective1.coefficients.get(v, 0.0) * var_dict[v] for v in problem.variables)
@@ -185,8 +211,8 @@ def solve_biobjective_weighted(
         # Normalizacion segun sentido:
         # Para MAX Z: maximizar + Z / range
         # Para MIN Z: maximizar - Z / range
-        term1 = (z1_expr / r1_effective) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_expr / r1_effective)
-        term2 = (z2_expr / r2_effective) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_expr / r2_effective)
+        term1 = (z1_expr / z1_range) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_expr / z1_range)
+        term2 = (z2_expr / z2_range) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_expr / z2_range)
 
         mw.obj = pyo.Objective(expr=a1 * term1 + a2 * term2, sense=pyo.maximize)
 
@@ -200,11 +226,13 @@ def solve_biobjective_weighted(
             z1_val = round(problem.objective1.evaluate(x_vals), 6)
             z2_val = round(problem.objective2.evaluate(x_vals), 6)
             w_val = round(float(pyo.value(mw.obj.expr)), 6)
+            status_str = "Optimo"
         else:
-            x_vals = {}
-            z1_val = 0.0
-            z2_val = 0.0
-            w_val = 0.0
+            x_vals = None
+            z1_val = None
+            z2_val = None
+            w_val = None
+            status_str = term_str
 
         weighted_runs.append({
             "run_index": idx + 1,
@@ -214,16 +242,16 @@ def solve_biobjective_weighted(
             "Z1": z1_val,
             "Z2": z2_val,
             "W": w_val,
-            "status": "Optimo" if "optimal" in term_str.lower() else term_str,
+            "status": status_str,
         })
 
     t_sweep_1 = time.perf_counter()
     t_sweep = t_sweep_1 - t_sweep_0
 
-    # 7. Agrupar soluciones unicas
+    # 7. Agrupar soluciones unicas (solo de corridas optimas)
     unique_solutions: List[Dict[str, Any]] = []
     for run in weighted_runs:
-        if run["status"] != "Optimo":
+        if run["status"] != "Optimo" or run["x"] is None:
             continue
         matched = False
         for u in unique_solutions:
@@ -291,13 +319,13 @@ def solve_biobjective_weighted(
 
     return MultiobjectiveSolution(
         individual_optima={
-            "Z1_max": {
+            "Z1_opt": {
                 "x": x_at_z1,
                 "Z1": round(z1_val_at_z1, 6),
                 "Z2": round(z2_val_at_z1, 6),
                 "status": res_z1.status.value,
             },
-            "Z2_max": {
+            "Z2_opt": {
                 "x": x_at_z2,
                 "Z1": round(z1_val_at_z2, 6),
                 "Z2": round(z2_val_at_z2, 6),

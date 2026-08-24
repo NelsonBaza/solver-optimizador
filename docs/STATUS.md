@@ -27,8 +27,8 @@
 | **Benchmark A (AMPL + HiGHS)** | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | **PASS** | Matriz de pagos validada, rangos $\Delta Z=(610, 89)$, 6 ejecuciones ponderadas, 3 soluciones únicas no dominadas verificadas contra referencia académica. |
 | **Benchmark A (Pyomo + HiGHS)** | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | **PASS** | Coincidencia matemática exacta al 100% con AMPL y referencia. Matriz de pagos, rangos, 6 pesos, 3 soluciones únicas no dominadas idénticas. |
 | **Comparación de Backends** | [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](BENCHMARK_A_BACKEND_COMPARISON.md) | **PASS** | Evaluación en 12 criterios y 8 dimensiones. Pyomo adoptado como backend exacto provisional (+5.7 pts). |
-| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 6 pruebas unitarias aprobadas (ejemplos mono y biobjetivo, infactibilidad, no acotamiento, validación de pesos e integridad). |
-| **MVP Interfaz Web** | `streamlit run streamlit_app.py` | **PASS** | Interfaz funcional para LP mono y biobjetivo con tablas dinámicas y gráficos 2D. |
+| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 12 pruebas unitarias aprobadas (mono MAX/MIN, bio MAX/MAX, MAX/MIN, MIN/MIN, infactibilidad, no acotamiento, validación de pesos, rango nulo, nombres especiales, entradas no finitas y gráficos). |
+| **MVP Interfaz Web** | `streamlit run streamlit_app.py` | **PASS** | Interfaz funcional y sincronizada para LP mono y biobjetivo con tablas dinámicas y gráficos 2D. |
 
 ---
 
@@ -38,7 +38,7 @@
 | :--- | :--- |
 | [`src/solver_optimizador/`](../src/solver_optimizador/) | Paquete principal del motor matemático desacoplado (`lp_models`, `lp_solver`, `multiobjective`, `plotting`). |
 | [`streamlit_app.py`](../streamlit_app.py) | Aplicación web interactiva Streamlit. |
-| [`tests/test_lp_core.py`](../tests/test_lp_core.py) | Suite de pruebas unitarias para el motor matemático (`pytest`). |
+| [`tests/test_lp_core.py`](../tests/test_lp_core.py) | Suite de pruebas unitarias para el motor matemático (`pytest`, 12 tests). |
 | [`verify_ampl_highs.py`](../verify_ampl_highs.py) | Script de verificación reproducible del entorno base AMPL + HiGHS. |
 | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | Script ejecutable del Benchmark A con AMPL + HiGHS. |
 | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | Script ejecutable del Benchmark A con Pyomo + HiGHS (APPSI). |
@@ -55,6 +55,7 @@
 | [`pyproject.toml`](../pyproject.toml) | Configuración de empaquetado con dependencias validadas y configuración de `pytest`. |
 | [`.gitignore`](../.gitignore) | Exclusiones de Git (entornos virtuales, temporales de solvers, logs, cachés). |
 | [`README.md`](../README.md) | Documento principal con alcance, guía de inicio del MVP, licencias y limitaciones. |
+| [`docs/UI_MVP_HARDENING.md`](UI_MVP_HARDENING.md) | Informe técnico de hardening del MVP de interfaz Streamlit y motor matemático. |
 | [`docs/UI_MVP_VALIDATION.md`](UI_MVP_VALIDATION.md) | Informe técnico de validación del MVP de interfaz Streamlit. |
 | [`docs/BENCHMARK_A.md`](BENCHMARK_A.md) | Informe técnico del Benchmark A multiobjetivo con AMPL. |
 | [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](BENCHMARK_A_BACKEND_COMPARISON.md) | Informe comparativo técnico y de rendimiento: AMPL vs. Pyomo. |

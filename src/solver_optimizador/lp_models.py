@@ -2,9 +2,19 @@
 Estructuras de datos y modelos para Programacion Lineal Continua.
 """
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Any, Optional, Tuple
+
+
+def is_finite_number(val: Any) -> bool:
+    """Verifica si un valor es un numero real finito (no None, no NaN, no infinito)."""
+    if val is None or isinstance(val, bool):
+        return False
+    if not isinstance(val, (int, float)):
+        return False
+    return math.isfinite(val)
 
 
 class Sense(str, Enum):
@@ -114,13 +124,22 @@ class LPProblem:
             raise ValueError("El problema debe contener al menos una variable.")
         if not self.constraints:
             raise ValueError("El problema debe contener al menos una restriccion.")
+        for v in self.variables:
+            if not isinstance(v, str) or not v.strip():
+                raise ValueError("Los nombres de las variables deben ser cadenas no vacias.")
         for c in self.constraints:
-            for v in c.coefficients:
+            if not is_finite_number(c.rhs):
+                raise ValueError(f"El lado derecho (RHS) de la restriccion '{c.name}' no es un numero finito: {c.rhs}")
+            for v, coeff in c.coefficients.items():
                 if v not in self.variables:
                     raise ValueError(f"Variable '{v}' en restriccion '{c.name}' no declarada en variables.")
-        for v in self.objective.coefficients:
+                if not is_finite_number(coeff):
+                    raise ValueError(f"Coeficiente de '{v}' en restriccion '{c.name}' no es un numero finito: {coeff}")
+        for v, coeff in self.objective.coefficients.items():
             if v not in self.variables:
                 raise ValueError(f"Variable '{v}' en objetivo no declarada en variables.")
+            if not is_finite_number(coeff):
+                raise ValueError(f"Coeficiente de '{v}' en objetivo no es un numero finito: {coeff}")
 
 
 @dataclass
@@ -135,16 +154,27 @@ class BiobjectiveProblem:
             raise ValueError("El problema debe contener al menos una variable.")
         if not self.constraints:
             raise ValueError("El problema debe contener al menos una restriccion.")
+        for v in self.variables:
+            if not isinstance(v, str) or not v.strip():
+                raise ValueError("Los nombres de las variables deben ser cadenas no vacias.")
         for c in self.constraints:
-            for v in c.coefficients:
+            if not is_finite_number(c.rhs):
+                raise ValueError(f"El lado derecho (RHS) de la restriccion '{c.name}' no es un numero finito: {c.rhs}")
+            for v, coeff in c.coefficients.items():
                 if v not in self.variables:
                     raise ValueError(f"Variable '{v}' en restriccion '{c.name}' no declarada en variables.")
-        for v in self.objective1.coefficients:
+                if not is_finite_number(coeff):
+                    raise ValueError(f"Coeficiente de '{v}' en restriccion '{c.name}' no es un numero finito: {coeff}")
+        for v, coeff in self.objective1.coefficients.items():
             if v not in self.variables:
                 raise ValueError(f"Variable '{v}' en objetivo 1 no declarada en variables.")
-        for v in self.objective2.coefficients:
+            if not is_finite_number(coeff):
+                raise ValueError(f"Coeficiente de '{v}' en objetivo 1 no es un numero finito: {coeff}")
+        for v, coeff in self.objective2.coefficients.items():
             if v not in self.variables:
                 raise ValueError(f"Variable '{v}' en objetivo 2 no declarada en variables.")
+            if not is_finite_number(coeff):
+                raise ValueError(f"Coeficiente de '{v}' en objetivo 2 no es un numero finito: {coeff}")
 
 
 @dataclass
