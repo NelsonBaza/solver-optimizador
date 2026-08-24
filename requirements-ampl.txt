@@ -1,3 +1,4 @@
-# Dependencias fijadas y verificadas para la prueba de concepto AMPL + HiGHS
+# Dependencias fijadas y verificadas para la prueba de concepto AMPL + HiGHS y Benchmark A
 amplpy==0.18.0
 ampltools==0.7.5
+matplotlib==3.11.1

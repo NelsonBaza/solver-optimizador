@@ -40,8 +40,19 @@ Este documento registra cronológicamente las decisiones de arquitectura, diseñ
 * **Fecha:** 2026-08-23
 * **Contexto:** La auditoría del primer checkpoint identificó que `requirements.txt` y `pyproject.toml` declaraban dependencias no validadas todavía, las versiones no estaban fijadas exactamente en `requirements-ampl.txt`, y no se distinguía con precisión la naturaleza propietaria de AMPL frente a la licencia libre de HiGHS.
 * **Decisión:**
-  1. Fijar versiones exactas en `requirements-ampl.txt` (`amplpy==0.18.0`, `ampltools==0.7.5`).
+  1. Fijar versiones exactas en `requirements-ampl.txt` (`amplpy==0.18.0`, `ampltools==0.7.5`, `matplotlib==3.11.1`).
   2. Renombrar la propuesta de dependencias completas a `requirements-proposed-full-stack.txt` con encabezado aclaratorio de no instalación en este checkpoint.
   3. Ajustar `pyproject.toml` para reflejar únicamente las dependencias validadas.
   4. Precisar en la documentación que HiGHS es open source (MIT), mientras que AMPL es software propietario con modalidades de uso gratuito/académico.
 * **Consecuencias:** El repositorio presenta total coherencia técnica entre archivos de configuración, entorno real y documentación, eliminando ambigüedades antes de abordar el Benchmark A.
+
+---
+
+## ADR-006: Evaluación de AMPL + HiGHS tras Benchmark A Multiobjetivo
+* **Fecha:** 2026-08-23
+* **Contexto:** Se completó el Benchmark A biobjetivo lineal con suma ponderada normalizada para evaluar la ergonomía de AMPL como backend matemático.
+* **Decisión:**
+  * AMPL + HiGHS **continúa como candidato válido** para el backend exacto de optimización LP/MILP gracias a su rápida parametrización y capacidad de alternar objetivos (`objective Obj; solve;`).
+  * Sin embargo, **NO se adopta todavía como arquitectura definitiva**, dado que toda la lógica de análisis multiobjetivo (matriz de pagos, rangos de normalización, detección de repetidos, filtrado de Pareto y renderizado gráfico) tuvo que programarse en Python.
+  * Se requiere contrastar estos resultados con una prueba equivalente en Pyomo o backends de modelado abiertos antes de tomar la decisión de arquitectura definitiva.
+* **Consecuencias:** Se mantiene la apertura arquitectónica y se documenta la evidencia experimental del esfuerzo de desarrollo requerido con AMPL.
