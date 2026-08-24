@@ -12,6 +12,8 @@
 * **highspy:** `1.15.1` (fijado en `requirements-pyomo.txt`, `pyproject.toml`)
 * **AMPL Engine (`ampl-module-base`):** `20260809`
 * **HiGHS Solver:** `1.15.1` (vía `ampl-module-highs` 20260813 y vía `highspy` 1.15.1)
+* **Backend exacto provisional:** `Pyomo + HiGHS` (adoptado provisionalmente según ADR-007)
+* **Backend comparativo validado:** `AMPL + HiGHS` (conservado como baseline de referencia)
 
 ---
 
@@ -20,9 +22,9 @@
 | Prueba / Benchmark | Script Asociado | Estado | Resultado Resumido |
 | :--- | :--- | :---: | :--- |
 | **Baseline Monoobjetivo (AMPL)** | [`verify_ampl_highs.py`](../verify_ampl_highs.py) | **PASS** | $x=(2.0, 2.0), Z=10.0$ (HiGHS 1.15.1, `solve_result=solved`). |
-| **Benchmark A (AMPL + HiGHS)** | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | **PASS** | Matriz de pagos validada, rangos $\Delta Z=(610, 89)$, 6 ejecuciones ponderadas, 3 soluciones únicas no dominadas verificadas contra referencia académica. Total: ~6.1 s. |
-| **Benchmark A (Pyomo + HiGHS)** | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | **PASS** | Coincidencia matemática exacta al 100% con AMPL y referencia. Matriz de pagos, rangos, 6 pesos, 3 soluciones únicas no dominadas idénticas. Total: ~30.6 ms. |
-| **Comparación de Backends** | [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](BENCHMARK_A_BACKEND_COMPARISON.md) | **PASS** | Evaluación en 12 criterios y 8 puntuaciones. Pyomo favorecido provisionalmente (+5.7 pts) por licenciamiento libre y arquitectura en memoria. |
+| **Benchmark A (AMPL + HiGHS)** | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | **PASS** | Matriz de pagos validada, rangos $\Delta Z=(610, 89)$, 6 ejecuciones ponderadas, 3 soluciones únicas no dominadas verificadas contra referencia académica. |
+| **Benchmark A (Pyomo + HiGHS)** | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | **PASS** | Coincidencia matemática exacta al 100% con AMPL y referencia. Matriz de pagos, rangos, 6 pesos, 3 soluciones únicas no dominadas idénticas. |
+| **Comparación de Backends** | [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](BENCHMARK_A_BACKEND_COMPARISON.md) | **PASS** | Evaluación en 12 criterios y 8 dimensiones. Pyomo adoptado como backend exacto provisional (+5.7 pts). |
 
 ---
 
@@ -81,4 +83,5 @@
 
 ## 4. Próximo Hito Previsto
 
-* **Hito siguiente:** Auditoría externa de la comparación Pyomo vs. AMPL y posterior evaluación del método de $\varepsilon$-restricciones.
+* **Hito siguiente:** Método $\varepsilon$-restricciones con Pyomo + HiGHS (una vez aprobada la auditoría externa del backend provisional).
+

@@ -384,20 +384,20 @@ def run_benchmark_a() -> Dict[str, Any]:
         }
     }
 
-    json_path = os.path.join("results", "benchmark_a_results.json")
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(benchmark_data, f, indent=2, ensure_ascii=False)
-    print(f"[Resultados guardados] JSON estructurado: {json_path}")
-
     t_total_end = time.perf_counter()
     t_total = t_total_end - t_total_start
 
-    # Add timing to benchmark_data for comparison
+    # Add timing to benchmark_data before saving JSON
     benchmark_data["timing"] = {
         "individual_optima_sec": round(t_individual, 4),
         "weighted_sweep_sec": round(t_sweep, 4),
         "total_sec": round(t_total, 4),
     }
+
+    json_path = os.path.join("results", "benchmark_a_results.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(benchmark_data, f, indent=2, ensure_ascii=False)
+    print(f"[Resultados guardados] JSON estructurado: {json_path}")
 
     print("-" * 75)
     print("TIEMPOS DE EJECUCION (AMPL + HiGHS):")

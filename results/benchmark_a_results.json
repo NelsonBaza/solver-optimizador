@@ -236,5 +236,10 @@
         }
       ]
     }
+  },
+  "timing": {
+    "individual_optima_sec": 1.3945,
+    "weighted_sweep_sec": 4.1891,
+    "total_sec": 6.0944
   }
 }

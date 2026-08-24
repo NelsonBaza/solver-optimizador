@@ -59,12 +59,21 @@ Este documento registra cronológicamente las decisiones de arquitectura, diseñ
 
 ---
 
-## ADR-007: Evaluación Comparativa de Backends — Pyomo vs. AMPL en Benchmark A
+## ADR-007: Pyomo + HiGHS como backend exacto provisional
 * **Fecha:** 2026-08-23
-* **Contexto:** Se implementó y validó el Benchmark A en Pyomo + HiGHS (APPSI) y se realizó una comparación multidimensional frente a AMPL + HiGHS basada en 12 criterios técnicos y 8 puntuaciones.
-* **Decisión:**
-  * Declarar a **`Pyomo favorito provisional`** (+5.7 puntos frente a AMPL: 36.2/40 vs. 30.5/40).
-  * Las razones clave son: (a) licenciamiento 100% código abierto permisivo (BSD-3 para Pyomo, MIT para HiGHS) sin limitaciones de licencias comerciales ni dependencias de módulos propietarios; (b) integración nativa en Python orientado a objetos con tipado e introspección; (c) rendimiento de resolución en memoria vía APPSI sin overhead de archivos de texto ni subprocesos; (d) total extensibilidad hacia solvers abiertos como SCIP, IPOPT y librerías del ecosistema Python (SciPy, SymPy, pymoo, Streamlit).
-  * **NO se adopta todavía la decisión arquitectónica definitiva**: esta recomendación provisional queda abierta para someterse a auditoría externa antes de avanzar hacia el método de $\varepsilon$-restricciones y algoritmos metaheurísticos.
-* **Consecuencias:** Se conserva el código de ambos backends en el repositorio como referencia comparativa y se fija el stack de Pyomo en `requirements-pyomo.txt` y `pyproject.toml`.
+* **Contexto:** Se implementó y validó el Benchmark A en Pyomo + HiGHS (APPSI) y se realizó una comparación multidimensional frente a AMPL + HiGHS en 12 criterios técnicos y 8 dimensiones de evaluación.
+* **Evidencia:**
+  * AMPL y Pyomo obtuvieron exactamente los mismos resultados matemáticos en óptimos individuales, matriz de pagos, rangos de normalización, barrido de ponderaciones y conjunto discreto de soluciones no dominadas.
+  * Ninguno de los dos frameworks aporta por sí solo matriz de pagos, Pareto, normalización o análisis multiobjetivo completo (todo se programó en Python).
+  * Pyomo presenta ventajas claras:
+    * Integración nativa en Python orientado a objetos con tipado e introspección.
+    * Instalación más simple mediante ruedas estándar de PyPI (`pip install pyomo highspy`).
+    * Licenciamiento completamente open source permisivo (Pyomo BSD-3 + HiGHS MIT) sin restricciones comerciales ni limitaciones de variables.
+    * Menor cantidad de código específico de backend.
+    * Menor overhead observado en el microbenchmark gracias a la comunicación directa en memoria de APPSI.
+* **Decisión:** Adoptar provisionalmente **`Pyomo + HiGHS`** como backend exacto para problemas lineales en las siguientes pruebas.
+* **Importante (Condición de Provisionalidad):**
+  * La decisión es **ESTRICTAMENTE PROVISIONAL** y puede revisarse posteriormente después de validar: problemas MILP, NLP, MINLP, integración con solvers como IPOPT y SCIP, y modelos de mayor escala.
+  * **NO se elimina AMPL del proyecto:** AMPL + HiGHS se conserva formalmente en el repositorio como backend comparativo de referencia validado.
+
 
