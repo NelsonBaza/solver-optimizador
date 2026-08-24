@@ -65,3 +65,16 @@ Durante el proceso de diseño e implementación se aplicaron las siguientes dire
 * **Benchmark A (Biobjetivo):**
   * $\text{MAX } Z_1 = 10x_1 + 3x_2, \text{MAX } Z_2 = 0.8x_1 + 1.3x_2$ s.a. $x_1 + x_2 \le 130, 2.5x_1 + x_2 \le 250, x_1,x_2 \ge 0$.
   * 3 soluciones únicas no dominadas: $A(0,130) \rightarrow (390,169)$, $B(80,50) \rightarrow (950,129)$, $C(100,0) \rightarrow (1000,80)$.
+
+---
+
+## 5. Detección de Resultados Desactualizados mediante Firma Determinista
+
+Para evitar que el usuario visualice resultados previos como si fueran actuales tras modificar parámetros del modelo:
+1. Se implementó `build_model_signature()` en `src/solver_optimizador/signature.py`, que genera un hash SHA-256 canónico a partir del tipo de problema, variables, sentidos, coeficientes de objetivo, restricciones y parámetros multiobjetivo.
+2. Al resolver el modelo, se almacena `st.session_state.last_solution_signature = current_signature`.
+3. En cada re-renderizado, si `last_solution_signature != current_signature`, la pestaña de resultados despliega una advertencia visual prominente:
+   > *"⚠️ Resultados desactualizados: El modelo fue modificado después de la última resolución. Pulse 'Resolver Modelo con Pyomo + HiGHS' en la pestaña de formulación para actualizar los resultados."*
+   y etiqueta el estado como `⚠️ Resultados pendientes de recalcular (mostrando resultados de la última resolución calculada)`.
+4. Si las firmas coinciden, el estado se marca como `✅ Resultados actualizados`.
+

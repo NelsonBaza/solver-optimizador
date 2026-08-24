@@ -28,6 +28,7 @@ from solver_optimizador.lp_models import (
 )
 from solver_optimizador.lp_solver import solve_lp
 from solver_optimizador.multiobjective import solve_biobjective_weighted, generate_weight_combinations
+from solver_optimizador.signature import build_model_signature
 from solver_optimizador.plotting import (
     plot_feasible_region_2d,
     plot_objective_space_2d,
@@ -83,6 +84,8 @@ def _init_session_state():
         st.session_state.last_solution_type = None
     if "last_solution_problem" not in st.session_state:
         st.session_state.last_solution_problem = None
+    if "last_solution_signature" not in st.session_state:
+        st.session_state.last_solution_signature = None
     if "example_msg" not in st.session_state:
         st.session_state.example_msg = None
 
@@ -118,6 +121,7 @@ def _load_example_mono():
         {"name": "Limite x2", "x1": 0.0, "x2": 1.0, "operator": "<=", "rhs": 3.0},
     ]
     st.session_state.last_solution = None
+    st.session_state.last_solution_signature = None
     st.session_state.example_msg = "Ejemplo 1 (Monoobjetivo) cargado exitosamente."
 
 
@@ -138,6 +142,7 @@ def _load_example_bio():
     st.session_state.mo_mode = "Barrido automatico"
     st.session_state.num_weights = 6
     st.session_state.last_solution = None
+    st.session_state.last_solution_signature = None
     st.session_state.example_msg = "Benchmark A (Biobjetivo) cargado exitosamente."
 
 
@@ -175,9 +180,7 @@ with st.sidebar:
             index=prob_type_index,
             key="radio_prob_type",
         )
-        if prob_type != st.session_state.problem_type:
-            st.session_state.problem_type = prob_type
-            st.session_state.last_solution = None
+        st.session_state.problem_type = prob_type
 
         st.subheader("2. Variables de Decision")
         st.caption("Variables continuas no negativas ($x_i \\ge 0$).")
@@ -441,6 +444,26 @@ with tab_form:
     btn_solve = st.button("🚀 Resolver Modelo con Pyomo + HiGHS", type="primary", width="stretch")
 
 
+# ---------------------------------------------------------------------------
+# Calculo de la Firma del Modelo Actual
+# ---------------------------------------------------------------------------
+constraints_records = edited_df.to_dict(orient="records") if not edited_df.empty else []
+current_model_signature = build_model_signature(
+    problem_type=st.session_state.problem_type,
+    var_names=var_names,
+    obj_sense=st.session_state.obj_sense,
+    obj_coeffs=st.session_state.obj_coeffs,
+    obj1_sense=st.session_state.obj1_sense,
+    obj1_coeffs=st.session_state.obj1_coeffs,
+    obj2_sense=st.session_state.obj2_sense,
+    obj2_coeffs=st.session_state.obj2_coeffs,
+    constraints_data=constraints_records,
+    mo_mode=st.session_state.mo_mode,
+    num_weights=st.session_state.num_weights,
+    custom_a1=st.session_state.custom_a1,
+)
+
+
 # ===========================================================================
 # LOGICA DE RESOLUCION
 # ===========================================================================
@@ -504,6 +527,7 @@ if btn_solve:
             st.session_state.last_solution = sol_mono
             st.session_state.last_solution_type = "Monoobjetivo"
             st.session_state.last_solution_problem = problem_mono
+            st.session_state.last_solution_signature = current_model_signature
 
         else:
             sense1_enum = Sense.from_str(st.session_state.obj1_sense)
@@ -530,6 +554,7 @@ if btn_solve:
             st.session_state.last_solution = sol_bio
             st.session_state.last_solution_type = "Biobjetivo"
             st.session_state.last_solution_problem = problem_bio
+            st.session_state.last_solution_signature = current_model_signature
 
 
 # ===========================================================================
@@ -537,8 +562,19 @@ if btn_solve:
 # ===========================================================================
 with tab_res:
     if st.session_state.last_solution is None:
-        st.info("Formule su problema en la pestaña **1. Formulacion del Modelo** y pulse **Resolver Modelo** para calcular y visualizar los resultados.")
+        st.info("Formule su problema en la pestaña **1. Formulacion del Modelo** y pulse **'🚀 Resolver Modelo con Pyomo + HiGHS'** para calcular y visualizar los resultados.")
     else:
+        # Verificacion de resultados desactualizados mediante firma
+        is_stale = (st.session_state.last_solution_signature != current_model_signature)
+        if is_stale:
+            st.warning(
+                "⚠️ **Resultados desactualizados:** El modelo fue modificado después de la última resolución. "
+                "Pulse **'🚀 Resolver Modelo con Pyomo + HiGHS'** en la pestaña de formulación para actualizar los resultados."
+            )
+            st.caption("Estado del modelo: ⚠️ **Resultados pendientes de recalcular** (mostrando resultados de la última resolución calculada)")
+        else:
+            st.caption("Estado del modelo: ✅ **Resultados actualizados**")
+
         # -------------------------------------------------------------------
         # RESULTADOS MONOOBJETIVO
         # -------------------------------------------------------------------
@@ -550,7 +586,7 @@ with tab_res:
                 st.success(f"**{sol.status_message}** · Tiempo de ejecucion: {sol.execution_time_sec*1000:.1f} ms")
 
                 with st.container(border=True):
-                    st.subheader("🎯 Solucion Optima Encontrada")
+                    st.subheader("🎯 Solucion Optima (Ultima Resolucion)")
                     m_cols = st.columns(1 + len(prob.variables))
                     with m_cols[0]:
                         st.metric(label="Valor Optimo Z*", value=f"{sol.objective_value:.4f}")
