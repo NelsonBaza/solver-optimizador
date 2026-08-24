@@ -27,7 +27,7 @@
 | **Benchmark A (AMPL + HiGHS)** | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | **PASS** | Matriz de pagos validada, rangos $\Delta Z=(610, 89)$, 6 ejecuciones ponderadas, 3 soluciones únicas no dominadas verificadas contra referencia académica. |
 | **Benchmark A (Pyomo + HiGHS)** | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | **PASS** | Coincidencia matemática exacta al 100% con AMPL y referencia. Matriz de pagos, rangos, 6 pesos, 3 soluciones únicas no dominadas idénticas. |
 | **Comparación de Backends** | [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](BENCHMARK_A_BACKEND_COMPARISON.md) | **PASS** | Evaluación en 12 criterios y 8 dimensiones. Pyomo adoptado como backend exacto provisional (+5.7 pts). |
-| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 24 pruebas unitarias aprobadas (mono MAX/MIN, bio MAX/MAX, MAX/MIN, MIN/MIN, infactibilidad, no acotamiento, validación de pesos, rango nulo, nombres especiales, entradas no finitas, gráficos, firmas deterministas e interpretación automática). |
+| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 27 pruebas unitarias aprobadas (mono MAX/MIN, bio MAX/MAX, MAX/MIN, MIN/MIN, infactibilidad, no acotamiento, validación de pesos, rango nulo, nombres especiales, entradas no finitas, gráficos, firmas deterministas e interpretación automática consciente del sentido MAX/MIN). |
 | **MVP Interfaz Web** | `streamlit run streamlit_app.py` | **PASS** | Interfaz funcional y sincronizada para LP mono y biobjetivo con tablas dinámicas, gráficos 2D optimizados, detección de resultados desactualizados e interpretación automática. |
 
 ---
@@ -40,7 +40,7 @@
 | [`streamlit_app.py`](../streamlit_app.py) | Aplicación web interactiva Streamlit. |
 | [`tests/test_lp_core.py`](../tests/test_lp_core.py) | Suite de pruebas unitarias para el motor matemático (`pytest`, 12 tests). |
 | [`tests/test_model_signature.py`](../tests/test_model_signature.py) | Pruebas unitarias para la detección determinista de resultados desactualizados (7 tests). |
-| [`tests/test_interpretation.py`](../tests/test_interpretation.py) | Pruebas unitarias para la interpretación matemática automática de resultados (5 tests). |
+| [`tests/test_interpretation.py`](../tests/test_interpretation.py) | Pruebas unitarias para la interpretación matemática automática de resultados (8 tests: MAX/MAX, MAX/MIN, MIN/MAX, MIN/MIN, estabilidad y casos mono). |
 | [`verify_ampl_highs.py`](../verify_ampl_highs.py) | Script de verificación reproducible del entorno base AMPL + HiGHS. |
 | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | Script ejecutable del Benchmark A con AMPL + HiGHS. |
 | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | Script ejecutable del Benchmark A con Pyomo + HiGHS (APPSI). |

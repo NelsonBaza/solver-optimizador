@@ -47,12 +47,13 @@ Se desarrolló un módulo desacoplado que genera explicaciones rigurosas y senci
 * **Diagnósticos:** En caso de infactibilidad o no acotamiento, orienta al usuario sobre cómo corregir el modelo.
 
 ### Biobjetivo (`interpret_biobjective_solution`)
-* **Óptimos Individuales:** Presenta los mejores valores aislados $Z_1^*$ y $Z_2^*$.
-* **Compromiso (Trade-off):** Cuantifica el sacrificio que experimenta un objetivo cuando se prioriza el otro a partir de la matriz de pagos.
+* **Consciencia de Sentido (MAX/MIN):** La interpretación multiobjetivo considera explícitamente el sentido MAX/MIN de cada objetivo (MAX/MAX, MAX/MIN, MIN/MAX, MIN/MIN) en la matriz de pagos y los óptimos individuales.
+* **Óptimos Individuales:** Presenta los mejores valores aislados $Z_1^*$ y $Z_2^*$ según sus respectivos sentidos (mayor valor si MAX, menor valor si MIN).
+* **Compromiso (Trade-off):** Describe neutralmente cómo priorizar un objetivo modifica desfavorablemente el valor alcanzado por el otro según su sentido de optimización.
 * **Alternativas No Dominadas:** Reporta el número de corridas, soluciones únicas y soluciones no dominadas encontradas.
-* **Estabilidad y Sensibilidad:** Explica que cuando múltiples combinaciones de ponderaciones convergen a la misma solución, dicha alternativa es robusta frente a un amplio rango de preferencias.
-* **Extremos:** Identifica qué soluciones extremas favorecen prioritariamente a cada objetivo.
-* **Aviso de Rigor:** Recuerda explícitamente que la interpretación corresponde al conjunto discreto evaluado y no a la frontera de Pareto continua completa.
+* **Estabilidad frente a Preferencias:** Explica con rigor que cuando múltiples ponderaciones convergen a la misma solución, dicha alternativa resulta óptima para varias de las preferencias discretas analizadas en el barrido (sin extrapolar indebidamente a intervalos continuos completos).
+* **Identificación de Extremos:** Determina la solución que más favorece a cada objetivo evaluando el valor máximo o mínimo según el sentido de cada uno.
+* **Aviso de Rigor:** Recuerda explícitamente que la interpretación describe el conjunto discreto evaluado y no implica la frontera de Pareto continua completa.
 
 ---
 

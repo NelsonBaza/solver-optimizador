@@ -1,7 +1,7 @@
 """
 Modulo de interpretacion base automatica de resultados de optimizacion matematica.
-Construye explicaciones rigurosas y claras a partir de la formulacion matematica y
-la solucion obtenida, sin inventar contexto de negocio no provisto por el usuario.
+Construye explicaciones rigurosas, claras y conscientes del sentido (MAX/MIN)
+a partir de la formulacion matematica y la solucion obtenida.
 """
 
 from typing import List, Dict, Any
@@ -78,6 +78,7 @@ def interpret_mono_solution(problem: LPProblem, solution: LPSolution) -> List[st
 def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: MultiobjectiveSolution) -> List[str]:
     """
     Genera una lista de observaciones interpretativas para un problema lineal biobjetivo resuelto por ponderaciones.
+    Considera rigurosamente el sentido MAX/MIN de cada funcion objetivo.
     """
     if not solution.unique_solutions:
         return [
@@ -86,8 +87,12 @@ def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: Multio
         ]
 
     bullets: List[str] = []
+    s1 = problem.objective1.sense
+    s2 = problem.objective2.sense
+    s1_str = "maximizar" if s1 == Sense.MAXIMIZE else "minimizar"
+    s2_str = "maximizar" if s2 == Sense.MAXIMIZE else "minimizar"
 
-    # 1. Optimos individuales y compromiso (trade-off)
+    # 1. Optimos individuales y matriz de pagos
     pm = solution.payoff_matrix
     if pm and "opt_Z1" in pm and "opt_Z2" in pm:
         z1_opt = pm["opt_Z1"]["Z1"]
@@ -96,17 +101,25 @@ def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: Multio
         z2_at_z1 = pm["opt_Z1"]["Z2"]
 
         bullets.append(
-            f"Los **optimos individuales** indican el mejor valor posible para cada objetivo de forma aislada: "
-            f"**$Z_1^* = {z1_opt:.2f}$** y **$Z_2^* = {z2_opt:.2f}$**."
+            f"Los **optimos individuales** representan el mejor valor alcanzable para cada objetivo de forma aislada: "
+            f"**$Z_1^* = {z1_opt:.2f}$** (al {s1_str} $Z_1$) y **$Z_2^* = {z2_opt:.2f}$** (al {s2_str} $Z_2$)."
         )
 
-        if abs(z1_opt - z1_at_z2) > 1e-4 or abs(z2_opt - z2_at_z1) > 1e-4:
+        x_opt1 = pm["opt_Z1"].get("x", {})
+        x_opt2 = pm["opt_Z2"].get("x", {})
+        diff_sol = any(abs(x_opt1.get(v, 0.0) - x_opt2.get(v, 0.0)) > 1e-4 for v in problem.variables) if (x_opt1 and x_opt2) else (abs(z1_opt - z1_at_z2) > 1e-4 or abs(z2_opt - z2_at_z1) > 1e-4)
+
+        if diff_sol:
             bullets.append(
                 f"La matriz de pagos evidencia un **compromiso (trade-off)** entre los objetivos: "
-                f"priorizar $Z_1$ al maximo reduce $Z_2$ a {z2_at_z1:.2f}, mientras que priorizar $Z_2$ reduce $Z_1$ a {z1_at_z2:.2f}."
+                f"al optimizar $Z_1$ individualmente ({s1.value.upper()}), $Z_1$ alcanza su optimo ({z1_opt:.2f}) mientras $Z_2$ toma el valor {z2_at_z1:.2f}; "
+                f"reciprocamente, al optimizar $Z_2$ individualmente ({s2.value.upper()}), $Z_2$ alcanza su optimo ({z2_opt:.2f}) mientras $Z_1$ toma el valor {z1_at_z2:.2f}. "
+                f"Los optimos individuales se alcanzan en soluciones diferentes y priorizar un objetivo modifica desfavorablemente el valor del otro segun su sentido de optimizacion."
             )
         else:
-            bullets.append("Ambos objetivos alcanzan su optimo simultaneamente en el mismo punto, sin conflicto evidente.")
+            bullets.append(
+                "Ambos objetivos alcanzan simultaneamente su optimo individual en la misma solucion, por lo que no se observa conflicto directo entre ellos en los optimos individuales."
+            )
 
     # 2. Soluciones unicas y no dominancia
     n_runs = len(solution.weighted_runs)
@@ -119,29 +132,44 @@ def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: Multio
         f"de las cuales **{n_nd} resultaron no dominadas** en el conjunto discreto evaluado."
     )
 
-    # 3. Estabilidad frente a ponderaciones
+    # 3. Estabilidad frente a ponderaciones evaluadas
     multi_weight_sols = [u for u in solution.unique_solutions if u["count"] > 1]
     if multi_weight_sols:
         examples_str = ", ".join(f"Solucion {u['id']} ({u['count']} ponderaciones)" for u in multi_weight_sols[:2])
         bullets.append(
-            f"El hecho de que distintas ponderaciones converjan a la misma solucion ({examples_str}) "
-            f"indica que dicha alternativa es estable y optima frente a un rango amplio de preferencias relativas."
+            f"El hecho de que varias ponderaciones evaluadas produzcan la misma solucion ({examples_str}) "
+            f"indica que dicha alternativa resulta optima para varias de las preferencias discretas analizadas en el barrido."
         )
 
-    # 4. Extremos del compromiso
-    if len(nd_solutions) >= 2:
-        sorted_nd = sorted(nd_solutions, key=lambda s: s["Z1"])
-        sol_left = sorted_nd[0]
-        sol_right = sorted_nd[-1]
-        bullets.append(
-            f"La **Solucion {sol_right['id']}** $Z=({sol_right['Z1']:.1f}, {sol_right['Z2']:.1f})$ favorece prioritariamente $Z_1$, "
-            f"mientras que la **Solucion {sol_left['id']}** $Z=({sol_left['Z1']:.1f}, {sol_left['Z2']:.1f})$ favorece prioritariamente $Z_2$."
-        )
+    # 4. Identificacion de extremos segun sentido MAX/MIN
+    if nd_solutions:
+        if s1 == Sense.MAXIMIZE:
+            best_z1_sol = max(nd_solutions, key=lambda s: s["Z1"])
+        else:
+            best_z1_sol = min(nd_solutions, key=lambda s: s["Z1"])
+
+        if s2 == Sense.MAXIMIZE:
+            best_z2_sol = max(nd_solutions, key=lambda s: s["Z2"])
+        else:
+            best_z2_sol = min(nd_solutions, key=lambda s: s["Z2"])
+
+        if best_z1_sol["id"] == best_z2_sol["id"]:
+            bullets.append(
+                f"La **Solucion {best_z1_sol['id']}** $Z=({best_z1_sol['Z1']:.1f}, {best_z1_sol['Z2']:.1f})$ "
+                f"es la alternativa del conjunto evaluado que mas favorece simultaneamente a ambos objetivos segun sus sentidos de optimizacion."
+            )
+        else:
+            bullets.append(
+                f"La **Solucion {best_z1_sol['id']}** $Z=({best_z1_sol['Z1']:.1f}, {best_z1_sol['Z2']:.1f})$ "
+                f"es la alternativa del conjunto evaluado que mas favorece a $Z_1$ segun su sentido de optimizacion ({s1.value.upper()}), "
+                f"mientras que la **Solucion {best_z2_sol['id']}** $Z=({best_z2_sol['Z1']:.1f}, {best_z2_sol['Z2']:.1f})$ "
+                f"es la alternativa que mas favorece a $Z_2$ segun su sentido de optimizacion ({s2.value.upper()})."
+            )
 
     # 5. Nota metodologica rigurosa
     bullets.append(
-        "**Nota metodologica:** Esta interpretacion describe el conjunto discreto de soluciones no dominadas obtenidas "
-        "para los pesos evaluados y no implica la reconstruccion completa de la frontera de Pareto continua."
+        "**Nota metodologica:** Esta interpretacion describe exclusivamente el conjunto discreto de soluciones no dominadas obtenidas "
+        "para las ponderaciones evaluadas y no implica la reconstruccion completa de la frontera de Pareto continua."
     )
 
     return bullets
