@@ -1,6 +1,6 @@
 """
 Aplicacion Web Streamlit — Suite de Optimizacion Matematica (MVP LP).
-Formulacion, resolucion y analisis de Programacion Lineal Continua (Monoobjetivo y Biobjetivo).
+Formulacion, resolucion, persistencia y analisis de Programacion Lineal Continua (Monoobjetivo y Biobjetivo).
 Backend matematico: Pyomo + HiGHS (APPSI).
 """
 
@@ -33,9 +33,18 @@ from solver_optimizador.interpretation import (
     interpret_mono_solution,
     interpret_biobjective_solution,
 )
+from solver_optimizador.model_io import (
+    serialize_model,
+    deserialize_model,
+    sanitize_filename,
+    SCHEMA_VERSION,
+)
 from solver_optimizador.plotting import (
     plot_feasible_region_2d,
     plot_objective_space_2d,
+    plot_variable_values,
+    plot_constraint_slacks,
+    plot_multiobjective_runs,
 )
 
 
@@ -53,6 +62,10 @@ st.set_page_config(
 def _init_session_state():
     if "editor_version" not in st.session_state:
         st.session_state.editor_version = 0
+    if "model_name" not in st.session_state:
+        st.session_state.model_name = "Modelo de Optimizacion"
+    if "model_desc" not in st.session_state:
+        st.session_state.model_desc = ""
     if "problem_type" not in st.session_state:
         st.session_state.problem_type = "Biobjetivo"
     if "num_vars" not in st.session_state:
@@ -105,15 +118,63 @@ def _clear_widget_keys():
         "mo_mode_radio",
         "num_weights_slider",
         "custom_a1_slider",
+        "model_name_input",
+        "model_desc_input",
     ]
     for k in list(st.session_state.keys()):
         if k.startswith("mono_c_") or k.startswith("bio_c1_") or k.startswith("bio_c2_") or k in keys_to_clear:
             del st.session_state[k]
 
 
+def _new_model():
+    _clear_widget_keys()
+    st.session_state.editor_version += 1
+    st.session_state.model_name = "Nuevo Modelo"
+    st.session_state.model_desc = ""
+    st.session_state.problem_type = "Monoobjetivo"
+    st.session_state.num_vars = 2
+    st.session_state.var_names = ["x1", "x2"]
+    st.session_state.obj_sense = "Maximizar"
+    st.session_state.obj_coeffs = {"x1": 1.0, "x2": 1.0}
+    st.session_state.constraints_data = [
+        {"name": "Restriccion 1", "x1": 1.0, "x2": 1.0, "operator": "<=", "rhs": 10.0}
+    ]
+    st.session_state.last_solution = None
+    st.session_state.last_solution_signature = None
+    st.session_state.example_msg = "Nuevo modelo en blanco iniciado."
+
+
+def _load_model_dict(data: Dict[str, Any]):
+    _clear_widget_keys()
+    st.session_state.editor_version += 1
+    st.session_state.model_name = data.get("metadata", {}).get("name", "Modelo Importado")
+    st.session_state.model_desc = data.get("metadata", {}).get("description", "")
+    st.session_state.problem_type = data["problem_type"]
+    st.session_state.num_vars = data["num_vars"]
+    st.session_state.var_names = data["var_names"]
+    st.session_state.constraints_data = data["constraints_data"]
+    if data["problem_type"] == "Monoobjetivo":
+        st.session_state.obj_sense = data["obj_sense"]
+        st.session_state.obj_coeffs = data["obj_coeffs"]
+    else:
+        st.session_state.obj1_sense = data["obj1_sense"]
+        st.session_state.obj1_coeffs = data["obj1_coeffs"]
+        st.session_state.obj2_sense = data["obj2_sense"]
+        st.session_state.obj2_coeffs = data["obj2_coeffs"]
+        st.session_state.mo_mode = data.get("mo_mode", "Barrido automatico")
+        st.session_state.num_weights = data.get("num_weights", 6)
+        st.session_state.custom_a1 = data.get("custom_a1", 0.5)
+
+    st.session_state.last_solution = None
+    st.session_state.last_solution_signature = None
+    st.session_state.example_msg = f"Modelo '{st.session_state.model_name}' cargado exitosamente."
+
+
 def _load_example_mono():
     _clear_widget_keys()
     st.session_state.editor_version += 1
+    st.session_state.model_name = "Ejemplo 1 (Monoobjetivo)"
+    st.session_state.model_desc = "MAX Z = 3x1 + 2x2 sujeto a restricciones lineales basicas."
     st.session_state.problem_type = "Monoobjetivo"
     st.session_state.num_vars = 2
     st.session_state.var_names = ["x1", "x2"]
@@ -132,6 +193,8 @@ def _load_example_mono():
 def _load_example_bio():
     _clear_widget_keys()
     st.session_state.editor_version += 1
+    st.session_state.model_name = "Benchmark A (Biobjetivo)"
+    st.session_state.model_desc = "Problema biobjetivo continuo MAX Z1, MAX Z2 con 6 ponderaciones."
     st.session_state.problem_type = "Biobjetivo"
     st.session_state.num_vars = 2
     st.session_state.var_names = ["x1", "x2"]
@@ -154,16 +217,49 @@ _init_session_state()
 
 
 # ---------------------------------------------------------------------------
-# Barra Lateral (Configuracion del Problema)
+# Barra Lateral (Configuracion y Gestion de Modelos)
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.title("⚙️ Configuracion")
     st.caption("Backend: **Pyomo 6.10.1 + HiGHS 1.15.1**")
 
-    # 1. Ejemplos Precargados
+    # 1. Gestion de Modelos (Guardar, Cargar, Nuevo)
+    with st.container(border=True):
+        st.subheader("📁 Gestion de Modelos")
+
+        col_new, _ = st.columns([1, 1])
+        with col_new:
+            if st.button("➕ Nuevo", help="Crear un modelo en blanco", width="stretch"):
+                _new_model()
+                st.rerun()
+
+        # Metadata del modelo
+        st.session_state.model_name = st.text_input(
+            "Nombre del modelo:",
+            value=st.session_state.model_name,
+            key="model_name_input",
+        )
+        st.session_state.model_desc = st.text_area(
+            "Descripcion / Notas:",
+            value=st.session_state.model_desc,
+            height=60,
+            key="model_desc_input",
+        )
+
+        # Cargar archivo JSON
+        uploaded_file = st.file_uploader("Cargar modelo (.json):", type=["json"], key="uploader_json")
+        if uploaded_file is not None:
+            try:
+                content = uploaded_file.read().decode("utf-8")
+                parsed_data = deserialize_model(content)
+                _load_model_dict(parsed_data)
+                st.rerun()
+            except Exception as e:
+                st.error(f"No se pudo cargar el modelo: {e}")
+
+    # 2. Ejemplos Precargados
     with st.container(border=True):
         st.subheader("📚 Ejemplos Academicos")
-        st.caption("Cargue un ejemplo predefinido para explorar la herramienta o modifiquelo para formular su propio problema.")
         col_ex1, col_ex2 = st.columns(2)
         with col_ex1:
             if st.button("Ejemplo 1 (Mono)", help="MAX Z = 3x1 + 2x2", width="stretch"):
@@ -174,7 +270,7 @@ with st.sidebar:
                 _load_example_bio()
                 st.rerun()
 
-    # 2. Modalidad y Variables
+    # 3. Modalidad y Variables
     with st.container(border=True):
         st.subheader("1. Tipo de Problema")
         prob_type_index = 0 if st.session_state.problem_type == "Monoobjetivo" else 1
@@ -191,7 +287,7 @@ with st.sidebar:
         num_vars = st.number_input(
             "Cantidad de variables:",
             min_value=1,
-            max_value=10,
+            max_value=20,
             value=int(st.session_state.num_vars),
             step=1,
             key="num_vars_input",
@@ -202,15 +298,14 @@ with st.sidebar:
         st.session_state.var_names = var_names
         st.info(f"Variables activas: `{'`, `'.join(var_names)}`")
 
-    # 3. Metodologia / Ayuda
+    # 4. Metodologia / Ayuda
     with st.expander("ℹ️ Metodologia Multiobjetivo"):
         st.markdown(
             """
-            * **Ponderaciones:** Combina los dos objetivos mediante pesos $(\\alpha_1, \\alpha_2)$ donde $\\alpha_1 + \\alpha_2 = 1$. Un peso mayor indica mayor importancia relativa.
+            * **Ponderaciones:** Combina los dos objetivos mediante pesos $(\\alpha_1, \\alpha_2)$ donde $\\alpha_1 + \\alpha_2 = 1$.
             * **Normalizacion por Rangos:** Utiliza la matriz de pagos:
               $$\\Delta Z_k = Z_{k,\\max} - Z_{k,\\min}$$
-              $$W = \\alpha_1 \\frac{Z_1}{\\Delta Z_1} + \\alpha_2 \\frac{Z_2}{\\Delta Z_2}$$
-              *(con signo negativo para objetivos de minimizacion).*
+              $$W = \\alpha_1 \\frac{\\pm Z_1}{\\Delta Z_1} + \\alpha_2 \\frac{\\pm Z_2}{\\Delta Z_2}$$
             * **Rigor:** Las soluciones corresponden a las ponderaciones evaluadas y no necesariamente representan toda la frontera de Pareto continua.
             """
         )
@@ -221,8 +316,7 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 st.title("📐 Suite de Optimizacion Matematica")
 st.markdown(
-    "Plataforma para formulacion, resolucion y analisis de **Programacion Lineal Continua** "
-    "(Monoobjetivo y Biobjetivo mediante Ponderaciones Normalizadas)."
+    f"Formulacion, resolucion y analisis de **Programacion Lineal Continua** · **{st.session_state.model_name}**"
 )
 
 if st.session_state.example_msg:
@@ -263,18 +357,24 @@ with tab_form:
                     st.session_state.obj_sense = sense_str
 
                 st.markdown("**Coeficientes lineales:**")
-                cols_c = st.columns(len(var_names))
+                st.caption("💡 **Nota:** Use punto (.) como separador decimal (ejemplo: 2.4525).")
+
+                # Disponer en cuadricula si hay mas de 4 variables
+                n_cols_grid = min(4, len(var_names))
                 obj_coeffs = {}
-                for i, v in enumerate(var_names):
-                    with cols_c[i]:
-                        default_val = float(st.session_state.obj_coeffs.get(v, 1.0))
-                        val = st.number_input(
-                            f"Coef. ${v}$:",
-                            value=default_val,
-                            step=1.0,
-                            key=f"mono_c_{v}",
-                        )
-                        obj_coeffs[v] = val
+                for row_start in range(0, len(var_names), n_cols_grid):
+                    cols_grid = st.columns(n_cols_grid)
+                    for idx, v in enumerate(var_names[row_start:row_start + n_cols_grid]):
+                        with cols_grid[idx]:
+                            default_val = float(st.session_state.obj_coeffs.get(v, 1.0 if v in ("x1", "x2") else 0.0))
+                            val = st.number_input(
+                                f"Coef. ${v}$:",
+                                value=default_val,
+                                step=1.0,
+                                format="%.4f",
+                                key=f"mono_c_{v}",
+                            )
+                            obj_coeffs[v] = val
                 st.session_state.obj_coeffs = obj_coeffs
 
             else:  # Biobjetivo
@@ -290,18 +390,21 @@ with tab_form:
                     )
                     st.session_state.obj1_sense = sense1_str
 
-                cols_c1 = st.columns(len(var_names))
+                n_cols_grid = min(4, len(var_names))
                 obj1_coeffs = {}
-                for i, v in enumerate(var_names):
-                    with cols_c1[i]:
-                        default_val = float(st.session_state.obj1_coeffs.get(v, 1.0))
-                        val = st.number_input(
-                            f"Coef. ${v}$ ($Z_1$):",
-                            value=default_val,
-                            step=1.0,
-                            key=f"bio_c1_{v}",
-                        )
-                        obj1_coeffs[v] = val
+                for row_start in range(0, len(var_names), n_cols_grid):
+                    cols_grid = st.columns(n_cols_grid)
+                    for idx, v in enumerate(var_names[row_start:row_start + n_cols_grid]):
+                        with cols_grid[idx]:
+                            default_val = float(st.session_state.obj1_coeffs.get(v, 1.0 if v in ("x1", "x2") else 0.0))
+                            val = st.number_input(
+                                f"Coef. ${v}$ ($Z_1$):",
+                                value=default_val,
+                                step=1.0,
+                                format="%.4f",
+                                key=f"bio_c1_{v}",
+                            )
+                            obj1_coeffs[v] = val
                 st.session_state.obj1_coeffs = obj1_coeffs
 
                 st.markdown("#### Objetivo 2 ($Z_2$)")
@@ -316,18 +419,20 @@ with tab_form:
                     )
                     st.session_state.obj2_sense = sense2_str
 
-                cols_c2 = st.columns(len(var_names))
                 obj2_coeffs = {}
-                for i, v in enumerate(var_names):
-                    with cols_c2[i]:
-                        default_val = float(st.session_state.obj2_coeffs.get(v, 1.0))
-                        val = st.number_input(
-                            f"Coef. ${v}$ ($Z_2$):",
-                            value=default_val,
-                            step=1.0,
-                            key=f"bio_c2_{v}",
-                        )
-                        obj2_coeffs[v] = val
+                for row_start in range(0, len(var_names), n_cols_grid):
+                    cols_grid = st.columns(n_cols_grid)
+                    for idx, v in enumerate(var_names[row_start:row_start + n_cols_grid]):
+                        with cols_grid[idx]:
+                            default_val = float(st.session_state.obj2_coeffs.get(v, 1.0 if v in ("x1", "x2") else 0.0))
+                            val = st.number_input(
+                                f"Coef. ${v}$ ($Z_2$):",
+                                value=default_val,
+                                step=1.0,
+                                format="%.4f",
+                                key=f"bio_c2_{v}",
+                            )
+                            obj2_coeffs[v] = val
                 st.session_state.obj2_coeffs = obj2_coeffs
 
         # Ponderaciones (solo en Biobjetivo)
@@ -376,7 +481,7 @@ with tab_form:
     with col_right:
         with st.container(border=True):
             st.subheader("📋 Restricciones Lineales")
-            st.caption("Añada, edite o elimine restricciones lineales en la tabla interactiva:")
+            st.caption("Añada, edite o elimine restricciones lineales. Use punto (.) como separador decimal:")
 
             current_data = []
             for idx, c_dict in enumerate(st.session_state.constraints_data):
@@ -394,10 +499,10 @@ with tab_form:
             col_config = {
                 "Nombre": st.column_config.TextColumn("Nombre", required=True),
                 "Operador": st.column_config.SelectboxColumn("Operador", options=["<=", ">=", "="], required=True),
-                "RHS": st.column_config.NumberColumn("Lado Derecho (RHS)", required=True, format="%.2f"),
+                "RHS": st.column_config.NumberColumn("Lado Derecho (RHS)", required=True, format="%.4f"),
             }
             for v in var_names:
-                col_config[v] = st.column_config.NumberColumn(f"Coef. {v}", required=True, format="%.2f")
+                col_config[v] = st.column_config.NumberColumn(f"Coef. {v}", required=True, format="%.4f")
 
             edited_df = st.data_editor(
                 df_constraints[column_order],
@@ -427,25 +532,60 @@ with tab_form:
                 st.latex(f"\\text{{{s1_txt}}}\\quad Z_1 = {expr_z1}")
                 st.latex(f"\\text{{{s2_txt}}}\\quad Z_2 = {expr_z2}")
 
-            # Restricciones en LaTeX
+            # Restricciones en LaTeX (mostrar hasta 12 para mantener rendimiento)
             latex_cons = []
             if not edited_df.empty:
-                for _, r in edited_df.iterrows():
+                for _, r in edited_df.head(15).iterrows():
                     c_terms = [f"{r[v]:g} {v}" for v in var_names if abs(r.get(v, 0.0)) > 1e-7]
                     lhs_str = " + ".join(c_terms).replace("+ -", "- ") if c_terms else "0"
                     op_sym = "\\le" if r.get("Operador") == "<=" else ("\\ge" if r.get("Operador") == ">=" else "=")
                     rhs_val = r.get("RHS", 0.0)
                     latex_cons.append(f"{lhs_str} {op_sym} {rhs_val:g}")
 
-            vars_nonneg = ", ".join(var_names) + " \\ge 0"
+            vars_nonneg = ", ".join(var_names[:6]) + (", \\dots" if len(var_names) > 6 else "") + " \\ge 0"
             all_lines = "\\\\\n".join(latex_cons + [vars_nonneg])
             st.latex(f"\\text{{sujeto a:}}\n\\begin{{cases}}\n{all_lines}\n\\end{{cases}}")
 
     # -----------------------------------------------------------------------
-    # Boton de Resolucion
+    # Boton de Resolucion y Descarga
     # -----------------------------------------------------------------------
     st.markdown("---")
-    btn_solve = st.button("🚀 Resolver Modelo con Pyomo + HiGHS", type="primary", width="stretch")
+    col_act1, col_act2 = st.columns([2, 1])
+    with col_act1:
+        btn_solve = st.button("🚀 Resolver Modelo con Pyomo + HiGHS", type="primary", width="stretch")
+    with col_act2:
+        # Serializar modelo actual para descarga
+        curr_export_dict = {
+            "type": st.session_state.problem_type,
+            "variables": var_names,
+            "constraints": edited_df.to_dict(orient="records") if not edited_df.empty else st.session_state.constraints_data,
+        }
+        if st.session_state.problem_type == "Monoobjetivo":
+            curr_export_dict["mono_objective"] = {
+                "sense": st.session_state.obj_sense,
+                "coefficients": st.session_state.obj_coeffs,
+            }
+        else:
+            curr_export_dict["bio_objectives"] = {
+                "obj1": {"sense": st.session_state.obj1_sense, "coefficients": st.session_state.obj1_coeffs},
+                "obj2": {"sense": st.session_state.obj2_sense, "coefficients": st.session_state.obj2_coeffs},
+            }
+            curr_export_dict["multiobjective_settings"] = {
+                "mode": st.session_state.mo_mode,
+                "num_weights": st.session_state.num_weights,
+                "custom_a1": st.session_state.custom_a1,
+            }
+        json_export_str = serialize_model(
+            curr_export_dict,
+            {"name": st.session_state.model_name, "description": st.session_state.model_desc},
+        )
+        st.download_button(
+            label="💾 Descargar Modelo (.json)",
+            data=json_export_str,
+            file_name=sanitize_filename(st.session_state.model_name),
+            mime="application/json",
+            width="stretch",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -591,16 +731,20 @@ with tab_res:
 
                 with st.container(border=True):
                     st.subheader("🎯 Solucion Optima (Ultima Resolucion)")
-                    m_cols = st.columns(1 + len(prob.variables))
+                    n_display_vars = min(len(prob.variables), 8)
+                    m_cols = st.columns(1 + n_display_vars)
                     with m_cols[0]:
                         st.metric(label="Valor Optimo Z*", value=f"{sol.objective_value:.4f}")
-                    for i, v in enumerate(prob.variables):
+                    for i, v in enumerate(prob.variables[:n_display_vars]):
                         with m_cols[i + 1]:
                             st.metric(label=f"Variable {v}*", value=f"{sol.variable_values[v]:.4f}")
+                    if len(prob.variables) > 8:
+                        st.caption(f"*(Mostrando las primeras 8 variables. Todas las {len(prob.variables)} variables se encuentran disponibles en el grafico y la tabla inferior)*")
 
-                col_tbl, col_plot = st.columns([1.2, 1.0])
+                # Sub-pestañas de analisis monoobjetivo
+                tab_mono_tbl, tab_mono_plots = st.tabs(["📋 Restricciones y Holguras", "📊 Graficos de Resultados"])
 
-                with col_tbl:
+                with tab_mono_tbl:
                     with st.container(border=True):
                         st.subheader("🔍 Analisis de Restricciones y Holguras")
                         con_rows = []
@@ -611,7 +755,7 @@ with tab_res:
                                 "Operador": cr.operator,
                                 "RHS": round(cr.rhs, 4),
                                 "Holgura": round(cr.slack, 4),
-                                "Estado": "Activa" if cr.is_active else "Con holgura",
+                                "Estado": "Activa (0.00)" if cr.is_active else "Con holgura",
                             })
                         df_res_con = pd.DataFrame(con_rows)
                         st.dataframe(
@@ -624,10 +768,22 @@ with tab_res:
                             },
                         )
 
-                with col_plot:
-                    with st.container(border=True):
-                        st.subheader("🗺️ Espacio de Variables (2D)")
-                        if len(prob.variables) == 2:
+                with tab_mono_plots:
+                    col_p1, col_p2 = st.columns(2)
+                    with col_p1:
+                        with st.container(border=True):
+                            fig_vars = plot_variable_values(sol.variable_values)
+                            st.pyplot(fig_vars)
+
+                    with col_p2:
+                        with st.container(border=True):
+                            fig_slacks = plot_constraint_slacks(sol.constraint_results)
+                            st.pyplot(fig_slacks)
+
+                    # Grafico 2D si aplica
+                    if len(prob.variables) == 2:
+                        with st.container(border=True):
+                            st.subheader("🗺️ Espacio de Variables (2D)")
                             fig_feas = plot_feasible_region_2d(
                                 prob,
                                 solutions=[{"id": "Optimo", "x": sol.variable_values}],
@@ -635,8 +791,11 @@ with tab_res:
                             )
                             if fig_feas:
                                 st.pyplot(fig_feas)
-                        else:
-                            st.info("La representacion grafica 2D esta disponible unicamente para problemas de exactamente dos variables.")
+                    else:
+                        st.info(
+                            f"ℹ️ La region factible 2D en el plano aplica para problemas con exactamente 2 variables. "
+                            f"Para este modelo de {len(prob.variables)} variables se presentan los graficos generales de variables y holguras."
+                        )
 
                 # Interpretacion automatica base monoobjetivo
                 with st.container(border=True):
@@ -859,16 +1018,20 @@ with tab_res:
 
                     with col_g2:
                         with st.container(border=True):
-                            if len(prob.variables) == 2:
-                                fig_rf = plot_feasible_region_2d(
-                                    prob,
-                                    solutions=sol.unique_solutions,
-                                    title="Espacio de variables: Region factible y soluciones",
-                                )
-                                if fig_rf:
-                                    st.pyplot(fig_rf)
-                            else:
-                                st.info("El espacio de variables 2D solo se representa graficamente para problemas con exactamente dos variables.")
+                            fig_runs = plot_multiobjective_runs(sol.weighted_runs, z1_name="Z1", z2_name="Z2")
+                            st.pyplot(fig_runs)
+
+                    if len(prob.variables) == 2:
+                        with st.container(border=True):
+                            fig_rf = plot_feasible_region_2d(
+                                prob,
+                                solutions=sol.unique_solutions,
+                                title="Espacio de variables: Region factible y soluciones",
+                            )
+                            if fig_rf:
+                                st.pyplot(fig_rf)
+                    else:
+                        st.info("ℹ️ El grafico de region factible 2D en el espacio de variables aplica para modelos con exactamente dos variables.")
 
                 # Subtab 5: Diagnostico
                 with subtab_diag:

@@ -78,3 +78,11 @@ Para evitar que el usuario visualice resultados previos como si fueran actuales 
    y etiqueta el estado como `⚠️ Resultados pendientes de recalcular (mostrando resultados de la última resolución calculada)`.
 4. Si las firmas coinciden, el estado se marca como `✅ Resultados actualizados`.
 
+---
+
+## 6. Persistencia de Modelos (JSON) y Gráficos para $N \ge 1$ Variables
+
+1. **Gestión de Modelos:** Barra lateral con acciones para iniciar un nuevo modelo en blanco, nombrar y describir el ejercicio, descargar en `.json` estructurado (`schema_version: "1.0"`), y cargar archivos JSON previamente guardados con validación completa y sincronización de widgets.
+2. **Gráficos para Mayor Dimensión:** En problemas con $N > 2$ variables (como problemas multiperíodo), la UI proporciona gráficos de barras para los valores óptimos de variables y las holguras de restricciones, además de subgráficos de sensibilidad para modelos biobjetivo.
+3. **Ayuda Decimal:** Inclusión de notas contextuales claras recomendando el uso de punto (.) como separador decimal para evitar interpretaciones numéricas erróneas.
+

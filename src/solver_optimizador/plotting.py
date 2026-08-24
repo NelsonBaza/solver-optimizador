@@ -1,6 +1,6 @@
 """
-Modulo de generacion de graficos para el espacio de variables (2D) y espacio de objetivos (2D).
-Optimizado para maxima legibilidad, separacion de anotaciones y ausencia de superposiciones.
+Modulo de generacion de graficos para el espacio de variables (2D), espacio de objetivos (2D)
+y graficos generales de resultados para modelos de dimension arbitraria (n >= 1).
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -248,8 +248,176 @@ def plot_objective_space_2d(
     ax.set_ylabel(f"Objetivo {z2_name} [{s2_str}]", fontsize=10, fontweight="bold")
     ax.set_title("Espacio de objetivos: Aproximacion discreta de soluciones", fontsize=11, fontweight="bold", pad=16)
     ax.grid(True, linestyle=":", alpha=0.6)
-    # Colocar la leyenda en la esquina inferior izquierda donde no compite con la frontera
     ax.legend(loc="lower left", fontsize=8.0, framealpha=0.9)
     fig.tight_layout()
 
+    return fig
+
+
+def plot_variable_values(
+    variable_values: Dict[str, float],
+    title: str = "Valores optimos de variables de decision",
+) -> plt.Figure:
+    """
+    Genera un grafico de barras con los valores optimos de las variables de decision.
+    Funciona para cualquier cantidad de variables (2, 8, 10 o mas).
+    """
+    vars_list = list(variable_values.keys())
+    vals_list = [float(variable_values[v]) for v in vars_list]
+
+    n = len(vars_list)
+    fig_w = max(7.0, min(14.0, n * 0.9))
+    fig, ax = plt.subplots(figsize=(fig_w, 4.8), dpi=150)
+
+    bars = ax.bar(vars_list, vals_list, color="#1f77b4", edgecolor="#0d47a1", width=0.55, zorder=3)
+
+    max_val = max(vals_list) if vals_list else 1.0
+    min_val = min(vals_list) if vals_list else 0.0
+
+    # Margen superior para que el texto encima de las barras no se corte
+    top_limit = max(max_val * 1.20, 1.0)
+    ax.set_ylim(min(0.0, min_val * 1.1), top_limit)
+
+    for bar, val in zip(bars, vals_list):
+        y_pos = bar.get_height()
+        if abs(val) < 1e-4:
+            txt = "0"
+            y_offset = top_limit * 0.02
+        else:
+            txt = f"{val:.4g}"
+            y_offset = top_limit * 0.02
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            y_pos + y_offset,
+            txt,
+            ha="center",
+            va="bottom",
+            fontsize=8.5,
+            fontweight="bold",
+            color="#333333",
+        )
+
+    ax.set_xlabel("Variables de Decision", fontsize=10, fontweight="bold")
+    ax.set_ylabel("Valor Optimo", fontsize=10, fontweight="bold")
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=14)
+    ax.grid(axis="y", linestyle=":", alpha=0.6, zorder=0)
+    fig.tight_layout()
+
+    return fig
+
+
+def plot_constraint_slacks(
+    constraint_results: List[Any],
+    title: str = "Analisis de holguras por restriccion",
+) -> plt.Figure:
+    """
+    Genera un grafico de barras horizontal con las holguras de cada restriccion.
+    Distingue visualmente las restricciones activas (holgura = 0) de las no activas.
+    """
+    names = []
+    slacks = []
+    is_actives = []
+    for i, cr in enumerate(constraint_results):
+        if isinstance(cr, dict):
+            n = str(cr.get("name", f"R_{i+1}"))
+            s = float(cr.get("slack", 0.0))
+            act = bool(cr.get("is_active", abs(s) < 1e-5))
+        else:
+            n = str(getattr(cr, "name", f"R_{i+1}"))
+            s = float(getattr(cr, "slack", 0.0))
+            act = bool(getattr(cr, "is_active", abs(s) < 1e-5))
+        names.append(n)
+        slacks.append(s)
+        is_actives.append(act)
+
+    n = len(names)
+    fig_h = max(4.5, min(12.0, n * 0.45 + 1.5))
+    fig, ax = plt.subplots(figsize=(7.5, fig_h), dpi=150)
+
+    y_pos = np.arange(len(names))
+    colors = ["#d62728" if act else "#2ca02c" for act in is_actives]
+
+    bars = ax.barh(y_pos, slacks, color=colors, edgecolor="#333333", height=0.55, zorder=3)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names, fontsize=8.5)
+    ax.invert_yaxis()  # Primera restriccion arriba
+
+    max_slack = max(slacks) if slacks else 1.0
+    ax.set_xlim(0, max(max_slack * 1.25, 1.0))
+
+    for bar, slack, act in zip(bars, slacks, is_actives):
+        w = bar.get_width()
+        if act:
+            lbl = "Activa (holgura = 0)"
+            col = "#b71c1c"
+        else:
+            lbl = f"Holgura: {slack:.4g}"
+            col = "#1b5e20"
+        ax.text(
+            w + max_slack * 0.02,
+            bar.get_y() + bar.get_height() / 2.0,
+            lbl,
+            va="center",
+            ha="left",
+            fontsize=8.0,
+            fontweight="bold",
+            color=col,
+        )
+
+    # Leyenda indicativa
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor="#d62728", edgecolor="#333333", label="Restriccion Activa (Limite efectivo)"),
+        Patch(facecolor="#2ca02c", edgecolor="#333333", label="Con Holgura (Capacidad excedente)"),
+    ]
+    ax.legend(handles=legend_elements, loc="lower right", fontsize=8.0, framealpha=0.9)
+
+    ax.set_xlabel("Holgura Calculada (Slack)", fontsize=10, fontweight="bold")
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=14)
+    ax.grid(axis="x", linestyle=":", alpha=0.6, zorder=0)
+    fig.tight_layout()
+
+    return fig
+
+
+def plot_multiobjective_runs(
+    weighted_runs: List[Dict[str, Any]],
+    z1_name: str = "Z1",
+    z2_name: str = "Z2",
+) -> plt.Figure:
+    """
+    Genera dos subgraficos verticales mostrando la evolucion de Z1 y Z2 frente al peso alpha1.
+    Evita problemas de escalas dispares manteniendo cada objetivo en su propio eje.
+    """
+    valid_runs = [r for r in weighted_runs if r.get("Z1") is not None and r.get("Z2") is not None]
+    if not valid_runs:
+        fig, ax = plt.subplots(figsize=(7.0, 4.0), dpi=150)
+        ax.text(0.5, 0.5, "No hay corridas validas para graficar", ha="center", va="center")
+        return fig
+
+    a1_vals = [r["alpha1"] for r in valid_runs]
+    z1_vals = [r["Z1"] for r in valid_runs]
+    z2_vals = [r["Z2"] for r in valid_runs]
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.5, 6.0), dpi=150, sharex=True)
+
+    # Grafico Z1
+    ax1.plot(a1_vals, z1_vals, marker="o", color="#1f77b4", linewidth=1.8, markersize=6, label=f"Objetivo {z1_name}")
+    for a1, z1 in zip(a1_vals, z1_vals):
+        ax1.annotate(f"{z1:.1f}", (a1, z1), textcoords="offset points", xytext=(0, 7), ha="center", fontsize=7.5)
+    ax1.set_ylabel(f"Valor {z1_name}", fontsize=9.5, fontweight="bold")
+    ax1.set_title(f"Sensibilidad de {z1_name} y {z2_name} frente a la ponderacion $\\alpha_1$", fontsize=11, fontweight="bold", pad=12)
+    ax1.grid(True, linestyle=":", alpha=0.6)
+    ax1.legend(loc="best", fontsize=8.0)
+
+    # Grafico Z2
+    ax2.plot(a1_vals, z2_vals, marker="s", color="#ff7f0e", linewidth=1.8, markersize=6, label=f"Objetivo {z2_name}")
+    for a1, z2 in zip(a1_vals, z2_vals):
+        ax2.annotate(f"{z2:.1f}", (a1, z2), textcoords="offset points", xytext=(0, 7), ha="center", fontsize=7.5)
+    ax2.set_xlabel("Ponderacion $\\alpha_1$ (Peso de $Z_1$)", fontsize=9.5, fontweight="bold")
+    ax2.set_ylabel(f"Valor {z2_name}", fontsize=9.5, fontweight="bold")
+    ax2.grid(True, linestyle=":", alpha=0.6)
+    ax2.legend(loc="best", fontsize=8.0)
+
+    fig.tight_layout()
     return fig

@@ -26,6 +26,7 @@ def build_model_signature(
     """
     Genera un hash SHA-256 determinista a partir de los parametros matematicos del modelo.
     Ignora aspectos visuales o temporales (editor_version, timestamps, widgets IDs).
+    Soporta tanto restricciones aplanadas como anidadas en 'coefficients'.
     """
     canonical_data: Dict[str, Any] = {
         "problem_type": str(problem_type).strip(),
@@ -52,7 +53,7 @@ def build_model_signature(
         else:
             canonical_data["custom_a1"] = round(float(custom_a1), 4) if custom_a1 is not None else 0.5
 
-    # Restricciones
+    # Restricciones (soporta claves aplanadas o anidadas)
     cons_list = []
     if constraints_data:
         for c in constraints_data:
@@ -64,9 +65,10 @@ def build_model_signature(
             except (ValueError, TypeError):
                 c_rhs = 0.0
 
+            sub_coeffs = c.get("coefficients", {}) if isinstance(c.get("coefficients"), dict) else {}
             c_coeffs = {}
             for v in var_names:
-                raw_c = c.get(v, 0.0)
+                raw_c = c.get(v, sub_coeffs.get(v, 0.0))
                 try:
                     c_coeffs[v] = float(raw_c)
                 except (ValueError, TypeError):
