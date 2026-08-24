@@ -13,6 +13,7 @@ Este script ejecuta el flujo completo de optimización biobjetivo lineal:
 import os
 import sys
 import json
+import time
 from typing import List, Dict, Any, Tuple
 import matplotlib
 matplotlib.use("Agg")  # Backend sin interfaz gráfica
@@ -43,6 +44,8 @@ def run_benchmark_a() -> Dict[str, Any]:
     print(f"Solver           : HiGHS (ampl-module-highs)")
     print("-" * 75)
 
+    tol = 1e-4
+    t_total_start = time.perf_counter()
     # 2. Formulación del modelo base en AMPL
     model_decl = """
     reset;
@@ -59,34 +62,39 @@ def run_benchmark_a() -> Dict[str, Any]:
 
     # 3. Optimización individual de Z1
     print("[1/4] Resolviendo Z1 individualmente (MAX 10*x1 + 3*x2)...")
+    t_z1_start = time.perf_counter()
     ampl.eval("objective Obj1; solve;")
+    t_z1_end = time.perf_counter()
     z1_opt_solve_res = str(ampl.get_value("solve_result"))
     x1_at_z1 = float(ampl.get_variable("x1").value())
     x2_at_z1 = float(ampl.get_variable("x2").value())
     z1_val_at_z1 = 10.0 * x1_at_z1 + 3.0 * x2_at_z1
     z2_val_at_z1 = 0.8 * x1_at_z1 + 1.3 * x2_at_z1
 
-    print(f"  -> Solución Z1*: x1 = {x1_at_z1:.4f}, x2 = {x2_at_z1:.4f}")
+    print(f"  -> Solucion Z1*: x1 = {x1_at_z1:.4f}, x2 = {x2_at_z1:.4f}")
     print(f"  -> Z1 = {z1_val_at_z1:.4f}, Z2 = {z2_val_at_z1:.4f} (estado: {z1_opt_solve_res})")
 
     # 4. Optimización individual de Z2
     print("\n[2/4] Resolviendo Z2 individualmente (MAX 0.8*x1 + 1.3*x2)...")
+    t_z2_start = time.perf_counter()
     ampl.eval("objective Obj2; solve;")
+    t_z2_end = time.perf_counter()
     z2_opt_solve_res = str(ampl.get_value("solve_result"))
     x1_at_z2 = float(ampl.get_variable("x1").value())
     x2_at_z2 = float(ampl.get_variable("x2").value())
     z1_val_at_z2 = 10.0 * x1_at_z2 + 3.0 * x2_at_z2
     z2_val_at_z2 = 0.8 * x1_at_z2 + 1.3 * x2_at_z2
 
-    print(f"  -> Solución Z2*: x1 = {x1_at_z2:.4f}, x2 = {x2_at_z2:.4f}")
+    print(f"  -> Solucion Z2*: x1 = {x1_at_z2:.4f}, x2 = {x2_at_z2:.4f}")
     print(f"  -> Z1 = {z1_val_at_z2:.4f}, Z2 = {z2_val_at_z2:.4f} (estado: {z2_opt_solve_res})")
 
+    t_individual = (t_z1_end - t_z1_start) + (t_z2_end - t_z2_start)
+
     # Validaciones obligatorias de óptimos individuales
-    tol = 1e-4
-    assert abs(x1_at_z1 - 100.0) < tol and abs(x2_at_z1 - 0.0) < tol, "Fallo en óptimo individual Z1 (x)"
-    assert abs(z1_val_at_z1 - 1000.0) < tol and abs(z2_val_at_z1 - 80.0) < tol, "Fallo en valores Z1, Z2 en óptimo Z1"
-    assert abs(x1_at_z2 - 0.0) < tol and abs(x2_at_z2 - 130.0) < tol, "Fallo en óptimo individual Z2 (x)"
-    assert abs(z1_val_at_z2 - 390.0) < tol and abs(z2_val_at_z2 - 169.0) < tol, "Fallo en valores Z1, Z2 en óptimo Z2"
+    assert abs(x1_at_z1 - 100.0) < tol and abs(x2_at_z1 - 0.0) < tol, "Fallo en optimo individual Z1 (x)"
+    assert abs(z1_val_at_z1 - 1000.0) < tol and abs(z2_val_at_z1 - 80.0) < tol, "Fallo en valores Z1, Z2 en optimo Z1"
+    assert abs(x1_at_z2 - 0.0) < tol and abs(x2_at_z2 - 130.0) < tol, "Fallo en optimo individual Z2 (x)"
+    assert abs(z1_val_at_z2 - 390.0) < tol and abs(z2_val_at_z2 - 169.0) < tol, "Fallo en valores Z1, Z2 en optimo Z2"
 
     # 5. Construcción de la matriz de pagos y rangos de normalización
     payoff_matrix = {
@@ -149,6 +157,8 @@ def run_benchmark_a() -> Dict[str, Any]:
     print(f"{'a1':>4} | {'a2':>4} | {'x1':>6} | {'x2':>6} | {'Z1':>7} | {'Z2':>7} | {'W':>8} | {'Estado':<8}")
     print("-" * 75)
 
+    t_sweep_start = time.perf_counter()
+
     for i, (a1, a2) in enumerate(weights_list):
         ampl.param["a1"] = a1
         ampl.param["a2"] = a2
@@ -182,6 +192,9 @@ def run_benchmark_a() -> Dict[str, Any]:
         assert abs(x2_val - exp["x2"]) < tol, f"Fallo en x2 para alpha=({a1},{a2})"
         assert abs(z1_val - exp["Z1"]) < tol, f"Fallo en Z1 para alpha=({a1},{a2})"
         assert abs(z2_val - exp["Z2"]) < tol, f"Fallo en Z2 para alpha=({a1},{a2})"
+
+    t_sweep_end = time.perf_counter()
+    t_sweep = t_sweep_end - t_sweep_start
 
     ampl.close()
 
@@ -375,6 +388,22 @@ def run_benchmark_a() -> Dict[str, Any]:
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(benchmark_data, f, indent=2, ensure_ascii=False)
     print(f"[Resultados guardados] JSON estructurado: {json_path}")
+
+    t_total_end = time.perf_counter()
+    t_total = t_total_end - t_total_start
+
+    # Add timing to benchmark_data for comparison
+    benchmark_data["timing"] = {
+        "individual_optima_sec": round(t_individual, 4),
+        "weighted_sweep_sec": round(t_sweep, 4),
+        "total_sec": round(t_total, 4),
+    }
+
+    print("-" * 75)
+    print("TIEMPOS DE EJECUCION (AMPL + HiGHS):")
+    print(f"  Optimizacion individual : {t_individual*1000:.1f} ms")
+    print(f"  Barrido 6 ponderaciones : {t_sweep*1000:.1f} ms")
+    print(f"  Total benchmark         : {t_total*1000:.1f} ms")
 
     print("=" * 75)
     print("[EXITO TOTAL] Benchmark A completado y validado al 100% contra referencia.")

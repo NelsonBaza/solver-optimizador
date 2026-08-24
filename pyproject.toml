@@ -11,6 +11,9 @@ requires-python = ">=3.10"
 dependencies = [
     "amplpy==0.18.0",
     "ampltools==0.7.5",
+    "matplotlib==3.11.1",
+    "pyomo==6.10.1",
+    "highspy==1.15.1",
 ]
 
 [project.optional-dependencies]
@@ -19,9 +22,6 @@ proposed = [
     "numpy>=2.2.1",
     "pandas>=2.2.3",
     "scipy>=1.15.1",
-    "matplotlib>=3.10.0",
-    "pyomo>=6.10.1",
-    "highspy>=1.15.1",
     "pyscipopt>=6.2.1",
     "idaes-pse>=2.12.0",
     "pymoo>=0.6.2",
@@ -31,3 +31,4 @@ proposed = [
     "openpyxl>=3.1.5",
     "xlsxwriter>=3.2.0",
 ]
+

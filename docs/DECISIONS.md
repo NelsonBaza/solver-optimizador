@@ -56,3 +56,15 @@ Este documento registra cronológicamente las decisiones de arquitectura, diseñ
   * Sin embargo, **NO se adopta todavía como arquitectura definitiva**, dado que toda la lógica de análisis multiobjetivo (matriz de pagos, rangos de normalización, detección de repetidos, filtrado de Pareto y renderizado gráfico) tuvo que programarse en Python.
   * Se requiere contrastar estos resultados con una prueba equivalente en Pyomo o backends de modelado abiertos antes de tomar la decisión de arquitectura definitiva.
 * **Consecuencias:** Se mantiene la apertura arquitectónica y se documenta la evidencia experimental del esfuerzo de desarrollo requerido con AMPL.
+
+---
+
+## ADR-007: Evaluación Comparativa de Backends — Pyomo vs. AMPL en Benchmark A
+* **Fecha:** 2026-08-23
+* **Contexto:** Se implementó y validó el Benchmark A en Pyomo + HiGHS (APPSI) y se realizó una comparación multidimensional frente a AMPL + HiGHS basada en 12 criterios técnicos y 8 puntuaciones.
+* **Decisión:**
+  * Declarar a **`Pyomo favorito provisional`** (+5.7 puntos frente a AMPL: 36.2/40 vs. 30.5/40).
+  * Las razones clave son: (a) licenciamiento 100% código abierto permisivo (BSD-3 para Pyomo, MIT para HiGHS) sin limitaciones de licencias comerciales ni dependencias de módulos propietarios; (b) integración nativa en Python orientado a objetos con tipado e introspección; (c) rendimiento de resolución en memoria vía APPSI sin overhead de archivos de texto ni subprocesos; (d) total extensibilidad hacia solvers abiertos como SCIP, IPOPT y librerías del ecosistema Python (SciPy, SymPy, pymoo, Streamlit).
+  * **NO se adopta todavía la decisión arquitectónica definitiva**: esta recomendación provisional queda abierta para someterse a auditoría externa antes de avanzar hacia el método de $\varepsilon$-restricciones y algoritmos metaheurísticos.
+* **Consecuencias:** Se conserva el código de ambos backends en el repositorio como referencia comparativa y se fija el stack de Pyomo en `requirements-pyomo.txt` y `pyproject.toml`.
+

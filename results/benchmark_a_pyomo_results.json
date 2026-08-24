@@ -1,0 +1,246 @@
+{
+  "metadata": {
+    "benchmark_name": "Benchmark A -- Pyomo + HiGHS Weighted Sum",
+    "date": "2026-08-23",
+    "python_version": "3.13.1 (tags/v3.13.1:0671451, Dec  3 2024, 19:06:28) [MSC v.1942 64 bit (AMD64)]",
+    "pyomo_version": "6.10.1",
+    "highspy_version": "1.15.1",
+    "solver": "HiGHS (1.15.1)",
+    "problem_type": "Biobjective Continuous LP"
+  },
+  "individual_optima": {
+    "Z1_max": {
+      "x1": 100.0,
+      "x2": 0.0,
+      "Z1": 1000.0,
+      "Z2": 80.0,
+      "termination": "TerminationCondition.optimal"
+    },
+    "Z2_max": {
+      "x1": 0.0,
+      "x2": 130.0,
+      "Z1": 390.0,
+      "Z2": 169.0,
+      "termination": "TerminationCondition.optimal"
+    }
+  },
+  "payoff_matrix": {
+    "opt_Z1": {
+      "x1": 100.0,
+      "x2": 0.0,
+      "Z1": 1000.0,
+      "Z2": 80.0
+    },
+    "opt_Z2": {
+      "x1": 0.0,
+      "x2": 130.0,
+      "Z1": 390.0,
+      "Z2": 169.0
+    }
+  },
+  "normalization_ranges": {
+    "Z1_max": 1000.0,
+    "Z1_min": 390.0,
+    "Z1_range": 610.0,
+    "Z2_max": 169.0,
+    "Z2_min": 80.0,
+    "Z2_range": 89.0
+  },
+  "weighted_runs": [
+    {
+      "run_index": 1,
+      "alpha1": 0.0,
+      "alpha2": 1.0,
+      "x1": 0.0,
+      "x2": 130.0,
+      "Z1": 390.0,
+      "Z2": 169.0,
+      "W": 1.898876,
+      "solve_result": "TerminationCondition.optimal"
+    },
+    {
+      "run_index": 2,
+      "alpha1": 0.2,
+      "alpha2": 0.8,
+      "x1": 0.0,
+      "x2": 130.0,
+      "Z1": 390.0,
+      "Z2": 169.0,
+      "W": 1.64697,
+      "solve_result": "TerminationCondition.optimal"
+    },
+    {
+      "run_index": 3,
+      "alpha1": 0.4,
+      "alpha2": 0.6,
+      "x1": 80.0,
+      "x2": 50.0,
+      "Z1": 950.0,
+      "Z2": 129.0,
+      "W": 1.492614,
+      "solve_result": "TerminationCondition.optimal"
+    },
+    {
+      "run_index": 4,
+      "alpha1": 0.6,
+      "alpha2": 0.4,
+      "x1": 80.0,
+      "x2": 50.0,
+      "Z1": 950.0,
+      "Z2": 129.0,
+      "W": 1.514202,
+      "solve_result": "TerminationCondition.optimal"
+    },
+    {
+      "run_index": 5,
+      "alpha1": 0.8,
+      "alpha2": 0.2,
+      "x1": 80.0,
+      "x2": 50.0,
+      "Z1": 950.0,
+      "Z2": 129.0,
+      "W": 1.535789,
+      "solve_result": "TerminationCondition.optimal"
+    },
+    {
+      "run_index": 6,
+      "alpha1": 1.0,
+      "alpha2": 0.0,
+      "x1": 100.0,
+      "x2": 0.0,
+      "Z1": 1000.0,
+      "Z2": 80.0,
+      "W": 1.639344,
+      "solve_result": "TerminationCondition.optimal"
+    }
+  ],
+  "unique_solutions": [
+    {
+      "id": "A",
+      "x1": 0.0,
+      "x2": 130.0,
+      "Z1": 390.0,
+      "Z2": 169.0,
+      "count": 2,
+      "generated_by_weights": [
+        {
+          "alpha1": 0.0,
+          "alpha2": 1.0
+        },
+        {
+          "alpha1": 0.2,
+          "alpha2": 0.8
+        }
+      ],
+      "pareto_status": "No dominada"
+    },
+    {
+      "id": "B",
+      "x1": 80.0,
+      "x2": 50.0,
+      "Z1": 950.0,
+      "Z2": 129.0,
+      "count": 3,
+      "generated_by_weights": [
+        {
+          "alpha1": 0.4,
+          "alpha2": 0.6
+        },
+        {
+          "alpha1": 0.6,
+          "alpha2": 0.4
+        },
+        {
+          "alpha1": 0.8,
+          "alpha2": 0.2
+        }
+      ],
+      "pareto_status": "No dominada"
+    },
+    {
+      "id": "C",
+      "x1": 100.0,
+      "x2": 0.0,
+      "Z1": 1000.0,
+      "Z2": 80.0,
+      "count": 1,
+      "generated_by_weights": [
+        {
+          "alpha1": 1.0,
+          "alpha2": 0.0
+        }
+      ],
+      "pareto_status": "No dominada"
+    }
+  ],
+  "pareto_classification": {
+    "A": {
+      "x": [
+        0.0,
+        130.0
+      ],
+      "Z": [
+        390.0,
+        169.0
+      ],
+      "status": "No dominada",
+      "generated_by_weights": [
+        {
+          "alpha1": 0.0,
+          "alpha2": 1.0
+        },
+        {
+          "alpha1": 0.2,
+          "alpha2": 0.8
+        }
+      ]
+    },
+    "B": {
+      "x": [
+        80.0,
+        50.0
+      ],
+      "Z": [
+        950.0,
+        129.0
+      ],
+      "status": "No dominada",
+      "generated_by_weights": [
+        {
+          "alpha1": 0.4,
+          "alpha2": 0.6
+        },
+        {
+          "alpha1": 0.6,
+          "alpha2": 0.4
+        },
+        {
+          "alpha1": 0.8,
+          "alpha2": 0.2
+        }
+      ]
+    },
+    "C": {
+      "x": [
+        100.0,
+        0.0
+      ],
+      "Z": [
+        1000.0,
+        80.0
+      ],
+      "status": "No dominada",
+      "generated_by_weights": [
+        {
+          "alpha1": 1.0,
+          "alpha2": 0.0
+        }
+      ]
+    }
+  },
+  "timing": {
+    "individual_optima_sec": 0.0073,
+    "weighted_sweep_sec": 0.0142,
+    "total_sec": 0.0216
+  }
+}

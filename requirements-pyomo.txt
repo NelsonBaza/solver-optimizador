@@ -1,0 +1,4 @@
+# Dependencias fijadas y verificadas para el Benchmark A con Pyomo + HiGHS
+pyomo==6.10.1
+highspy==1.15.1
+matplotlib==3.11.1
