@@ -1,7 +1,7 @@
 """
 Aplicacion Web Streamlit — Suite de Optimizacion Matematica (MVP LP).
 Formulacion, resolucion, persistencia y analisis de Programacion Lineal Continua (Monoobjetivo y Biobjetivo).
-Soporta hasta 100 variables, nombres personalizados, persistencia JSON y carga atomica.
+Soporta hasta 100 variables, nombres personalizados, persistencia JSON y carga atomica sincronizada.
 Backend matematico: Pyomo + HiGHS (APPSI).
 """
 
@@ -40,6 +40,10 @@ from solver_optimizador.model_io import (
     normalize_constraints,
     sanitize_filename,
     SCHEMA_VERSION,
+)
+from solver_optimizador.problem_builder import (
+    build_lp_problem_from_state,
+    build_biobjective_problem_from_state,
 )
 from solver_optimizador.plotting import (
     plot_feasible_region_2d,
@@ -111,90 +115,83 @@ def _init_session_state():
         st.session_state.example_msg = None
 
 
-def _clear_widget_keys():
-    """Limpia las claves de widgets para evitar desincronizacion con session_state."""
-    prefixes = ("mono_c_", "bio_c1_", "bio_c2_", "var_name_")
-    exact_keys = [
-        "radio_prob_type",
-        "num_vars_input",
-        "mono_sense_select",
-        "bio_sense1_select",
-        "bio_sense2_select",
-        "mo_mode_radio",
-        "num_weights_slider",
-        "custom_a1_slider",
-        "model_name_input",
-        "model_desc_input",
-    ]
-    for k in list(st.session_state.keys()):
-        if any(k.startswith(p) for p in prefixes) or k in exact_keys:
-            del st.session_state[k]
+def _clear_widget_keys(state=None):
+    """
+    Las claves de widgets estan versionadas mediante `editor_version`.
+    Al incrementar `editor_version`, Streamlit instancia widgets totalmente nuevos
+    inicializados deterministicamente desde `session_state`.
+    """
+    pass
 
 
-def _new_model():
-    _clear_widget_keys()
-    st.session_state.editor_version += 1
-    st.session_state.model_name = "Nuevo Modelo"
-    st.session_state.model_desc = ""
-    st.session_state.problem_type = "Monoobjetivo"
-    st.session_state.num_vars = 2
-    st.session_state.var_names = ["x1", "x2"]
-    st.session_state.obj_sense = "Maximizar"
-    st.session_state.obj_coeffs = {"x1": 1.0, "x2": 1.0}
-    st.session_state.obj1_sense = "Maximizar"
-    st.session_state.obj1_coeffs = {"x1": 1.0, "x2": 1.0}
-    st.session_state.obj2_sense = "Maximizar"
-    st.session_state.obj2_coeffs = {"x1": 1.0, "x2": 1.0}
-    st.session_state.constraints_data = [
+def _new_model(state=None):
+    if state is None:
+        state = st.session_state
+    _clear_widget_keys(state)
+    state.editor_version += 1
+    state.model_name = "Nuevo Modelo"
+    state.model_desc = ""
+    state.problem_type = "Monoobjetivo"
+    state.num_vars = 2
+    state.var_names = ["x1", "x2"]
+    state.obj_sense = "Maximizar"
+    state.obj_coeffs = {"x1": 1.0, "x2": 1.0}
+    state.obj1_sense = "Maximizar"
+    state.obj1_coeffs = {"x1": 1.0, "x2": 1.0}
+    state.obj2_sense = "Maximizar"
+    state.obj2_coeffs = {"x1": 1.0, "x2": 1.0}
+    state.constraints_data = [
         {"name": "Restriccion 1", "x1": 1.0, "x2": 1.0, "operator": "<=", "rhs": 10.0}
     ]
-    st.session_state.last_solution = None
-    st.session_state.last_solution_type = None
-    st.session_state.last_solution_problem = None
-    st.session_state.last_solution_signature = None
-    st.session_state.example_msg = "Nuevo modelo en blanco iniciado."
+    state.last_solution = None
+    state.last_solution_type = None
+    state.last_solution_problem = None
+    state.last_solution_signature = None
+    state.example_msg = "Nuevo modelo en blanco iniciado."
 
 
-def _load_model_dict(data: Dict[str, Any]):
-    """Carga atómica completa del modelo desde la estructura deserializada."""
-    _clear_widget_keys()
-    st.session_state.editor_version += 1
+def _load_model_dict(data: Dict[str, Any], state=None):
+    """Carga atomica completa del modelo desde la estructura deserializada."""
+    if state is None:
+        state = st.session_state
+    _clear_widget_keys(state)
+    state.editor_version += 1
     meta_name = data.get("metadata", {}).get("name", "Modelo Importado")
-    st.session_state.model_name = meta_name
-    st.session_state.model_desc = data.get("metadata", {}).get("description", "")
-    st.session_state.problem_type = data["problem_type"]
-    st.session_state.num_vars = data["num_vars"]
-    st.session_state.var_names = list(data["var_names"])
-    st.session_state.constraints_data = data["constraints_data"]
+    state.model_name = meta_name
+    state.model_desc = data.get("metadata", {}).get("description", "")
+    state.problem_type = data["problem_type"]
+    state.num_vars = data["num_vars"]
+    state.var_names = list(data["var_names"])
+    state.constraints_data = data["constraints_data"]
 
     if data["problem_type"] == "Monoobjetivo":
-        st.session_state.obj_sense = data["obj_sense"]
-        st.session_state.obj_coeffs = data["obj_coeffs"]
-        st.session_state.obj1_sense = "Maximizar"
-        st.session_state.obj1_coeffs = {v: 0.0 for v in data["var_names"]}
-        st.session_state.obj2_sense = "Maximizar"
-        st.session_state.obj2_coeffs = {v: 0.0 for v in data["var_names"]}
+        state.obj_sense = data["obj_sense"]
+        state.obj_coeffs = data["obj_coeffs"]
+        state.obj1_sense = "Maximizar"
+        state.obj1_coeffs = {v: 0.0 for v in data["var_names"]}
+        state.obj2_sense = "Maximizar"
+        state.obj2_coeffs = {v: 0.0 for v in data["var_names"]}
     else:
-        st.session_state.obj1_sense = data["obj1_sense"]
-        st.session_state.obj1_coeffs = data["obj1_coeffs"]
-        st.session_state.obj2_sense = data["obj2_sense"]
-        st.session_state.obj2_coeffs = data["obj2_coeffs"]
-        st.session_state.mo_mode = data.get("mo_mode", "Barrido automatico")
-        st.session_state.num_weights = data.get("num_weights", 6)
-        st.session_state.custom_a1 = data.get("custom_a1", 0.5)
-        st.session_state.obj_sense = "Maximizar"
-        st.session_state.obj_coeffs = {v: 0.0 for v in data["var_names"]}
+        state.obj1_sense = data["obj1_sense"]
+        state.obj1_coeffs = data["obj1_coeffs"]
+        state.obj2_sense = data["obj2_sense"]
+        state.obj2_coeffs = data["obj2_coeffs"]
+        state.mo_mode = data.get("mo_mode", "Barrido automatico")
+        state.num_weights = data.get("num_weights", 6)
+        state.custom_a1 = data.get("custom_a1", 0.5)
+        state.obj_sense = "Maximizar"
+        state.obj_coeffs = {v: 0.0 for v in data["var_names"]}
 
-    st.session_state.last_solution = None
-    st.session_state.last_solution_type = None
-    st.session_state.last_solution_problem = None
-    st.session_state.last_solution_signature = None
+    state.last_solution = None
+    state.last_solution_type = None
+    state.last_solution_problem = None
+    state.last_solution_signature = None
 
     n_v = data["num_vars"]
     n_c = len(data["constraints_data"])
     p_t = data["problem_type"]
     s_info = data["obj_sense"] if p_t == "Monoobjetivo" else f"Z1:{data['obj1_sense']} / Z2:{data['obj2_sense']}"
-    st.session_state.example_msg = f"✅ Modelo '{meta_name}' cargado correctamente ({n_v} variables · {n_c} restricciones · {p_t} · {s_info})."
+    state.example_msg = f"✅ Modelo '{meta_name}' cargado correctamente ({n_v} variables · {n_c} restricciones · {p_t} · {s_info})."
 
 
 def _load_example_mono():
@@ -264,17 +261,17 @@ with st.sidebar:
                 _new_model()
                 st.rerun()
 
-        # Metadata del modelo
+        # Metadata del modelo (versionado determinista)
         st.session_state.model_name = st.text_input(
             "Nombre del modelo:",
             value=st.session_state.model_name,
-            key="model_name_input",
+            key=f"model_name_input_{st.session_state.editor_version}",
         )
         st.session_state.model_desc = st.text_area(
             "Descripcion / Notas:",
             value=st.session_state.model_desc,
             height=60,
-            key="model_desc_input",
+            key=f"model_desc_input_{st.session_state.editor_version}",
         )
 
         # Cargar archivo JSON con confirmacion explicita
@@ -322,7 +319,7 @@ with st.sidebar:
             "Seleccione la modalidad:",
             options=["Monoobjetivo", "Biobjetivo"],
             index=prob_type_index,
-            key="radio_prob_type",
+            key=f"radio_prob_type_{st.session_state.editor_version}",
         )
         st.session_state.problem_type = prob_type
 
@@ -334,10 +331,10 @@ with st.sidebar:
             max_value=100,
             value=int(st.session_state.num_vars),
             step=1,
-            key="num_vars_input",
+            key=f"num_vars_input_{st.session_state.editor_version}",
         )
         
-        # Sincronizar longitud de nombres al cambiar num_vars
+        # Sincronizar longitud de nombres al cambiar num_vars interactivamente
         old_var_names = list(st.session_state.var_names)
         if int(num_vars) != len(old_var_names):
             st.session_state.num_vars = int(num_vars)
@@ -462,7 +459,7 @@ with tab_form:
                         "Sentido:",
                         ["Maximizar", "Minimizar"],
                         index=sense_idx,
-                        key="mono_sense_select",
+                        key=f"mono_sense_select_{st.session_state.editor_version}",
                     )
                     st.session_state.obj_sense = sense_str
 
@@ -496,7 +493,7 @@ with tab_form:
                         "Sentido $Z_1$:",
                         ["Maximizar", "Minimizar"],
                         index=sense1_idx,
-                        key="bio_sense1_select",
+                        key=f"bio_sense1_select_{st.session_state.editor_version}",
                     )
                     st.session_state.obj1_sense = sense1_str
                 with col_s2:
@@ -505,7 +502,7 @@ with tab_form:
                         "Sentido $Z_2$:",
                         ["Maximizar", "Minimizar"],
                         index=sense2_idx,
-                        key="bio_sense2_select",
+                        key=f"bio_sense2_select_{st.session_state.editor_version}",
                     )
                     st.session_state.obj2_sense = sense2_str
 
@@ -547,7 +544,7 @@ with tab_form:
                     options=["Barrido automatico", "Ponderacion unica"],
                     index=mo_mode_idx,
                     horizontal=True,
-                    key="mo_mode_radio",
+                    key=f"mo_mode_radio_{st.session_state.editor_version}",
                 )
                 st.session_state.mo_mode = mo_mode
 
@@ -558,7 +555,7 @@ with tab_form:
                         max_value=21,
                         value=int(st.session_state.num_weights),
                         step=1,
-                        key="num_weights_slider",
+                        key=f"num_weights_slider_{st.session_state.editor_version}",
                     )
                     st.session_state.num_weights = num_weights
                     preview_w = generate_weight_combinations(num_weights)
@@ -571,7 +568,7 @@ with tab_form:
                         max_value=1.0,
                         value=float(st.session_state.custom_a1),
                         step=0.05,
-                        key="custom_a1_slider",
+                        key=f"custom_a1_slider_{st.session_state.editor_version}",
                     )
                     st.session_state.custom_a1 = custom_a1
                     custom_a2 = round(1.0 - custom_a1, 4)
@@ -614,6 +611,15 @@ with tab_form:
                 key=f"constraints_editor_{st.session_state.editor_version}",
             )
 
+        # Normalizar restricciones de forma canonica
+        raw_ui_records = edited_df.to_dict(orient="records") if not edited_df.empty else []
+        try:
+            canonical_constraints = normalize_constraints(raw_ui_records, var_names) if raw_ui_records else []
+            cons_norm_error = None
+        except Exception as e:
+            canonical_constraints = []
+            cons_norm_error = str(e)
+
         # Vista Previa Matematica
         with st.container(border=True):
             st.subheader("👁️ Vista Previa Matematica del Modelo")
@@ -634,7 +640,7 @@ with tab_form:
                 st.latex(f"\\text{{{s1_txt}}}\\quad Z_1 = {expr_z1}")
                 st.latex(f"\\text{{{s2_txt}}}\\quad Z_2 = {expr_z2}")
 
-            # Restricciones en LaTeX (mostrar hasta 12 para mantener rendimiento)
+            # Restricciones en LaTeX (mostrar hasta 15 para mantener rendimiento)
             latex_cons = []
             if not edited_df.empty:
                 for _, r in edited_df.head(15).iterrows():
@@ -648,14 +654,28 @@ with tab_form:
             all_lines = "\\\\\n".join(latex_cons + [vars_nonneg])
             st.latex(f"\\text{{sujeto a:}}\n\\begin{{cases}}\n{all_lines}\n\\end{{cases}}")
 
-    # Normalizar restricciones de forma canonica
-    raw_ui_records = edited_df.to_dict(orient="records") if not edited_df.empty else []
-    try:
-        canonical_constraints = normalize_constraints(raw_ui_records, var_names) if raw_ui_records else []
-        cons_norm_error = None
-    except Exception as e:
-        canonical_constraints = []
-        cons_norm_error = str(e)
+        # Diagnostico del Modelo Efectivo (Opcional / Cerrado por defecto)
+        with st.expander("🔧 Diagnostico del modelo efectivo", expanded=False):
+            st.markdown(f"**Nombre:** {st.session_state.model_name}")
+            st.markdown(f"**Tipo de Problema:** {st.session_state.problem_type}")
+            st.markdown(f"**Variables ({len(var_names)}):** `{'`, `'.join(var_names)}`")
+            if st.session_state.problem_type == "Monoobjetivo":
+                st.markdown(f"**Sentido:** {st.session_state.obj_sense}")
+                st.markdown(f"**Coeficientes no nulos:** {[f'{v}: {c}' for v, c in st.session_state.obj_coeffs.items() if abs(c) > 1e-7]}")
+            else:
+                st.markdown(f"**Sentidos:** Z1={st.session_state.obj1_sense}, Z2={st.session_state.obj2_sense}")
+            st.markdown(f"**Restricciones validas procesadas:** {len(canonical_constraints)}")
+            if canonical_constraints:
+                diag_summary = []
+                for c in canonical_constraints:
+                    active_vars = [f"{v}: {val}" for v, val in c["coefficients"].items() if abs(val) > 1e-7]
+                    diag_summary.append({
+                        "Nombre": c["name"],
+                        "Operador": c["operator"],
+                        "RHS": c["rhs"],
+                        "Variables Activas": ", ".join(active_vars[:4]) + (", ..." if len(active_vars) > 4 else ""),
+                    })
+                st.dataframe(pd.DataFrame(diag_summary), width="stretch", hide_index=True)
 
     # -----------------------------------------------------------------------
     # Boton de Resolucion y Descarga
@@ -743,22 +763,12 @@ if btn_solve:
     elif not canonical_constraints:
         st.error("El problema debe contener al menos una restriccion lineal valida.")
     else:
-        constraints_list = [
-            LinearConstraint(
-                name=c["name"],
-                coefficients=c["coefficients"],
-                operator=Operator.from_str(c["operator"]),
-                rhs=c["rhs"],
-            )
-            for c in canonical_constraints
-        ]
-
         if st.session_state.problem_type == "Monoobjetivo":
-            sense_enum = Sense.from_str(st.session_state.obj_sense)
-            problem_mono = LPProblem(
-                variables=var_names,
-                objective=LinearObjective("Z", sense_enum, st.session_state.obj_coeffs),
-                constraints=constraints_list,
+            problem_mono = build_lp_problem_from_state(
+                var_names=var_names,
+                obj_sense=st.session_state.obj_sense,
+                obj_coeffs=st.session_state.obj_coeffs,
+                canonical_constraints=canonical_constraints,
             )
             with st.spinner("Resolviendo el modelo con Pyomo + HiGHS..."):
                 sol_mono = solve_lp(problem_mono)
@@ -768,13 +778,13 @@ if btn_solve:
             st.session_state.last_solution_signature = current_model_signature
 
         else:
-            sense1_enum = Sense.from_str(st.session_state.obj1_sense)
-            sense2_enum = Sense.from_str(st.session_state.obj2_sense)
-            problem_bio = BiobjectiveProblem(
-                variables=var_names,
-                objective1=LinearObjective("Z1", sense1_enum, st.session_state.obj1_coeffs),
-                objective2=LinearObjective("Z2", sense2_enum, st.session_state.obj2_coeffs),
-                constraints=constraints_list,
+            problem_bio = build_biobjective_problem_from_state(
+                var_names=var_names,
+                obj1_sense=st.session_state.obj1_sense,
+                obj1_coeffs=st.session_state.obj1_coeffs,
+                obj2_sense=st.session_state.obj2_sense,
+                obj2_coeffs=st.session_state.obj2_coeffs,
+                canonical_constraints=canonical_constraints,
             )
             weights_param = None
             num_comb_param = None
@@ -806,10 +816,10 @@ with tab_res:
         is_stale = (st.session_state.last_solution_signature != current_model_signature)
         if is_stale:
             st.warning(
-                "⚠️ **Resultados desactualizados:** El modelo fue modificado después de la última resolución. "
-                "Pulse **'🚀 Resolver Modelo con Pyomo + HiGHS'** en la pestaña de formulación para actualizar los resultados."
+                "⚠️ **Resultados desactualizados:** El modelo fue modificado despues de la ultima resolucion. "
+                "Pulse **'🚀 Resolver Modelo con Pyomo + HiGHS'** en la pestaña de formulacion para actualizar los resultados."
             )
-            st.caption("Estado del modelo: ⚠️ **Resultados pendientes de recalcular** (mostrando resultados de la última resolución calculada)")
+            st.caption("Estado del modelo: ⚠️ **Resultados pendientes de recalcular** (mostrando resultados de la ultima resolucion calculada)")
         else:
             st.caption("Estado del modelo: ✅ **Resultados actualizados**")
 

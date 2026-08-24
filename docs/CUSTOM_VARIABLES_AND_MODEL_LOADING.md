@@ -1,24 +1,29 @@
 # Nombres Personalizados de Variables y Carga Atómica de Modelos
 
-**Fecha:** 23 de agosto de 2026  
-**Módulos:** `src/solver_optimizador/model_io.py`, `src/solver_optimizador/plotting.py`, `streamlit_app.py`
+**Fecha:** 24 de agosto de 2026  
+**Módulos:** `src/solver_optimizador/model_io.py`, `src/solver_optimizador/problem_builder.py`, `src/solver_optimizador/plotting.py`, `streamlit_app.py`
 
 ---
 
-## 1. Carga Atómica de Modelos con Confirmación Explícita
+## 1. Carga Atómica de Modelos con Confirmación Explícita y Versionado de Widgets
 
-### Diagnóstico del Problema Anterior:
-Anteriormente, al seleccionar un archivo en `st.file_uploader`, la carga se disparaba de forma automática e inmediata. Esto provocaba desincronización de estado interno, mezcla de configuraciones previas (ej. residuos de objetivos biobjetivo en modelos monoobjetivo) y potenciales bucles de re-ejecución.
+### Diagnóstico de Riesgo de Desincronización:
+Anteriormente, los widgets de Streamlit (`text_input`, `radio`, `number_input`, `selectbox`, `slider`) poseían claves estáticas (`key="radio_prob_type"`, `key="num_vars_input"`, etc.). En el ciclo de vida de Streamlit, los widgets con claves estáticas conservan en caché su valor interactivo anterior e ignoran los parámetros `value=` / `index=` en los re-renderizados, lo que provocaba que al cargar un modelo de 24 variables se sobreescribiera la sesión con los valores viejos (ej. truncando a 2 variables y cambiando sentido a MAX).
 
 ### Solución Implementada:
-1. **Selección sin Modificación de Estado:** Al seleccionar un archivo `.json`, la aplicación no modifica el modelo activo inmediatamente.
-2. **Tarjeta de Vista Previa:** Muestra un resumen claro del archivo validado:
-   * Nombre del modelo y descripción.
-   * Tipo de problema (Monoobjetivo / Biobjetivo).
-   * Cantidad y nombres de variables.
-   * Cantidad de restricciones.
-   * Sentidos de optimización.
-3. **Botón Explícito de Carga (`📥 Cargar modelo`):** Solo al hacer clic se ejecuta una carga **atómica ("todo o nada")**, limpiando claves obsoletas, incrementando `uploader_version` para reiniciar el componente de subida y refrescando la interfaz con un mensaje unívoco de confirmación.
+1. **Versionado Dinámico de Widgets (`editor_version`):**
+   * Todos los componentes interactivos usan claves vinculadas al contador de versión:
+     `key=f"model_name_input_{editor_version}"`
+     `key=f"radio_prob_type_{editor_version}"`
+     `key=f"num_vars_input_{editor_version}"`
+     `key=f"mono_sense_select_{editor_version}"`
+     `key=f"var_names_editor_{editor_version}"`
+     `key=f"constraints_editor_{editor_version}"`
+   * Al cargar un modelo (`_load_model_dict`), iniciar nuevo (`_new_model`) o cargar ejemplos (`_load_example_mono`, `_load_example_bio`), `editor_version` se incrementa atómicamente, forzando a Streamlit a montar widgets completamente nuevos inicializados directamente desde los datos cargados.
+2. **Tarjeta de Vista Previa del Archivo:**
+   * Muestra metadata, tipo de problema, recuento de variables, restricciones y sentidos antes de aplicar los cambios.
+3. **Módulo Desacoplado `problem_builder.py`:**
+   * `build_lp_problem_from_state` y `build_biobjective_problem_from_state` actúan como constructores únicos y canónicos compartidos entre la interfaz y los tests unitarios.
 
 ---
 
@@ -46,4 +51,4 @@ Se formuló y resolvió el problema completo de despacho hidrotérmico multiper�
 * **Objetivo:** $\text{MIN } Z = 100 GT_1 + 100 GT_2 + 100 GT_3 + 100 GT_4$.
 * **Restricciones (28):** Balance hídrico, relación turbinación-potencia, conversión potencia-energía, balance energético/demanda, cotas de volumen y cotas de turbina.
 * **Valor Óptimo Obtenido:** **$Z^* = 6701.25$**.
-* **Persistencia Round-Trip:** Guardado a JSON (Schema 1.0) $\rightarrow$ Carga en modelo en blanco $\rightarrow$ Resolución: **$Z^* = 6701.25$** con coincidencia exacta de firma matemática.
+* **Persistencia Round-Trip:** Guardado a JSON (Schema 1.0) $\rightarrow$ Carga en modelo en blanco $\rightarrow$ Resolución: **$Z^* = 6701.25$** con coincidencia exacta de firma matemática y ausencia de residuos de estado.
