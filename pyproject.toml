@@ -3,30 +3,31 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "optimization_suite"
+name = "solver-optimizador"
 version = "0.1.0"
-description = "Academic and research suite for mathematical and multiobjective optimization in Python without commercial solvers"
+description = "Evaluación de herramientas gratuitas, académicamente gratuitas y de código abierto para optimización matemática en Python"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "numpy>=1.24.0",
-    "pandas>=2.0.0",
-    "scipy>=1.10.0",
-    "matplotlib>=3.7.0",
-    "pyomo>=6.8.0",
-    "highspy>=1.8.0",
-    "pyscipopt>=5.0.0",
-    "idaes-pse>=2.8.0",
-    "pymoo>=0.6.0",
-    "sympy>=1.12",
-    "pydantic>=2.0.0",
-    "streamlit>=1.35.0",
-    "openpyxl>=3.1.0",
-    "xlsxwriter>=3.1.0"
+    "amplpy==0.18.0",
+    "ampltools==0.7.5",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.0.0"
+# Dependencias opcionales propuestas para futuras fases (consultar requirements-proposed-full-stack.txt)
+proposed = [
+    "numpy>=2.2.1",
+    "pandas>=2.2.3",
+    "scipy>=1.15.1",
+    "matplotlib>=3.10.0",
+    "pyomo>=6.10.1",
+    "highspy>=1.15.1",
+    "pyscipopt>=6.2.1",
+    "idaes-pse>=2.12.0",
+    "pymoo>=0.6.2",
+    "sympy>=1.14.0",
+    "pydantic>=2.13.2",
+    "streamlit>=1.62.0",
+    "openpyxl>=3.1.5",
+    "xlsxwriter>=3.2.0",
 ]

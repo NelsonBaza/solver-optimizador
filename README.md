@@ -1,25 +1,45 @@
 # Suite de Optimización Matemática — Prueba de Concepto AMPL + HiGHS
 
-Este repositorio contiene una prueba de concepto (PoC) para evaluar herramientas gratuitas y de código abierto orientadas a la formulación, resolución y análisis de problemas de optimización matemática en Python con fines académicos, docentes y de investigación.
+Este repositorio contiene una prueba de concepto (PoC) para evaluar herramientas gratuitas, académicamente gratuitas y/o de código abierto orientadas a la formulación, resolución y análisis de problemas de optimización matemática en Python con fines académicos, docentes y de investigación.
 
 > [!IMPORTANT]
 > **La arquitectura definitiva del proyecto todavía NO está decidida.**
-> En esta fase se está evaluando la viabilidad, ergonomía y rendimiento de **AMPL**, **amplpy** y el solver gratuito **HiGHS**. Posteriormente se evaluarán alternativas y complementos como **Pyomo**, **IPOPT**, **SCIP**, **pymoo** y métodos multiobjetivo.
+> En este momento se está evaluando la viabilidad, ergonomía y desempeño de **AMPL**, **amplpy** y el solver **HiGHS**. Posteriormente se evaluarán alternativas y complementos como **Pyomo**, **IPOPT**, **SCIP**, **pymoo** y métodos multiobjetivo.
 
 ---
 
-## Estado Actual
+## Naturaleza y Clasificación de Licencias
 
-Actualmente se encuentra verificado y validado un entorno reproducible mínimo en Python 3.13 sobre Windows que integra:
-- **`amplpy`** como interfaz de conexión en Python.
-- **AMPL Engine** (`ampl-module-base`).
-- **HiGHS Solver** (`ampl-module-highs`) para optimización lineal continua (LP) y entera mixta (MILP).
-
-El modelo de verificación resuelve de forma determinista y programática el problema de prueba lineal estándar.
+Para total rigor conceptual y legal:
+* **HiGHS:** Software libre y de código abierto (*open source*, licencia MIT).
+* **AMPL:** Software comercial propietario que ofrece modalidades de uso gratuito y académico sujetas a los términos y condiciones de su licencia (AMPL Community Edition / Academic License).
+* **amplpy:** Paquete e interfaz oficial en Python para interactuar con el entorno AMPL.
 
 ---
 
-## Instalación y Configuración del Entorno
+## Estado Actual de Validación
+
+### Validado Actualmente:
+- ✅ Python `3.13.1` en Windows (entorno aislado `.venv`)
+- ✅ `amplpy==0.18.0` y `ampltools==0.7.5`
+- ✅ **AMPL Engine** (`ampl-module-base` v20260809)
+- ✅ **HiGHS Solver** (`ampl-module-highs` v20260813 / HiGHS 1.15.1)
+- ✅ Script de verificación reproducible [`verify_ampl_highs.py`](verify_ampl_highs.py) con aserciones programáticas.
+
+### Todavía NO Validado:
+- ❌ Benchmark A (problema biobjetivo)
+- ❌ Métodos multiobjetivo (matriz de pagos, puntos ideal/nadir)
+- ❌ Método de suma ponderada y normalización
+- ❌ Método de $\varepsilon$-restricciones
+- ❌ Clasificación y filtrado de soluciones de Pareto (dominancia, no dominancia, repetidas)
+- ❌ Integración de `pymoo` y algoritmos evolutivos (NSGA-II)
+- ❌ Integración de `IPOPT` y `SCIP`
+- ❌ Interfaz gráfica de usuario (Streamlit)
+- ❌ Decisión final de arquitectura (AMPL vs. Pyomo vs. APIs directas)
+
+---
+
+## Instalación y Configuración del Entorno Validado
 
 El entorno virtual `.venv` **no está versionado** en el repositorio para mantener la higiene y portabilidad del código. Para reproducir el entorno desde cero:
 
@@ -34,7 +54,7 @@ cd solver-optimizador
 python -m venv .venv
 ```
 
-### 3. Instalar dependencias Python
+### 3. Instalar las dependencias exactas validadas
 ```powershell
 & ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
 & ".\.venv\Scripts\python.exe" -m pip install -r requirements-ampl.txt
@@ -44,6 +64,9 @@ python -m venv .venv
 ```powershell
 & ".\.venv\Scripts\python.exe" -c "from amplpy import modules; modules.install('highs')"
 ```
+
+> [!NOTE]
+> El archivo [`requirements-proposed-full-stack.txt`](requirements-proposed-full-stack.txt) contiene una propuesta preliminar para fases posteriores y **no** debe instalarse en este checkpoint.
 
 ---
 
@@ -68,19 +91,6 @@ $$\begin{aligned}
 - **Estado:** `solved` (`solve_result_num = 0`, *optimal solution found*)
 - **Variables:** $x = 2.0$, $y = 2.0$
 - **Función Objetivo:** $Z = 10.0$
-
----
-
-## Limitaciones Actuales y Alcance Pendiente
-
-Aclaraciones explícitas sobre el estado actual del repositorio:
-- ❌ **No existe interfaz gráfica** (Streamlit u otra).
-- ❌ **No se ha implementado el Benchmark A** (problema biobjetivo).
-- ❌ **No se ha implementado la matriz de pagos** ni cálculo de puntos ideal/nadir.
-- ❌ **No se ha implementado el método de suma ponderada** ni normalización multiobjetivo.
-- ❌ **No se ha implementado el método de $\varepsilon$-restricciones**.
-- ❌ **No se ha integrado NSGA-II** ni librerías evolutivas (`pymoo`).
-- ❌ **No se ha tomado la decisión final de arquitectura** entre AMPL, Pyomo, APIs directas u otros backends.
 
 ---
 

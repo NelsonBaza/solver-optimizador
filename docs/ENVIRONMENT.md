@@ -20,8 +20,8 @@ Para garantizar la reproducibilidad y evitar confusiones, los componentes del pr
 │                   ENTORNO VIRTUAL (.venv)                       │
 │  Intérprete: .venv\Scripts\python.exe                           │
 │  Paquetes pip (requirements-ampl.txt):                          │
-│    - amplpy (0.18.0)                                            │
-│    - ampltools (0.7.5)                                          │
+│    - amplpy == 0.18.0                                           │
+│    - ampltools == 0.7.5                                         │
 │    - requests, certifi, urllib3, idna, charset-normalizer       │
 └────────────────────────────────┬────────────────────────────────┘
                                  │ Gestiona vía amplpy.modules
@@ -35,14 +35,16 @@ Para garantizar la reproducibilidad y evitar confusiones, los componentes del pr
 ```
 
 > [!IMPORTANT]
-> `requirements-ampl.txt` instala el paquete de integración `amplpy` mediante `pip`. Los ejecutables de **AMPL Engine** y **HiGHS** son gestionados como módulos binarios de AMPL y se instalan mediante el comando `amplpy.modules.install('highs')`.
+> `requirements-ampl.txt` instala las dependencias exactas en Python mediante `pip`. Los ejecutables binarios de **AMPL Engine** y **HiGHS** son gestionados como módulos de AMPL y se descargan e instalan mediante el comando `amplpy.modules.install('highs')`.
+>
+> Las dependencias para fases posteriores de la suite completa se encuentran registradas en [`requirements-proposed-full-stack.txt`](../requirements-proposed-full-stack.txt) a título informativo y **no** deben instalarse en este checkpoint.
 
 ---
 
 ## 2. Recreación del Entorno Paso a Paso
 
 ### Paso 1: Requisitos Previos
-- Disponer de Python 3.13 de 64 bits instalado en el sistema operativo.
+- Python 3.13 (64 bits) instalado en el sistema operativo.
 - PowerShell o Command Prompt en Windows.
 
 ### Paso 2: Creación del Entorno Virtual Aislado
@@ -52,16 +54,15 @@ python -m venv .venv
 ```
 
 ### Paso 3: Activación en PowerShell (Opcional)
-Si la política de ejecución de scripts de PowerShell lo permite:
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
-*Alternativamente, se puede invocar directamente el ejecutable del entorno sin necesidad de activación global de shell:*
+*Alternativamente, se puede invocar directamente el ejecutable del entorno:*
 ```powershell
 & ".\.venv\Scripts\python.exe" <comando>
 ```
 
-### Paso 4: Instalación de Dependencias Python
+### Paso 4: Instalación de Dependencias Python Fijadas
 ```powershell
 & ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
 & ".\.venv\Scripts\python.exe" -m pip install -r requirements-ampl.txt
@@ -90,7 +91,8 @@ HiGHS path: E:\AI\solver-optimizador\.venv\Lib\site-packages\ampl_module_highs\b
 
 ---
 
-## 4. Requisitos de Licencia
+## 4. Clasificación y Términos de Licencia
 
-* **HiGHS:** Es un solver de código abierto bajo licencia MIT, 100% gratuito tanto en su versión nativa como en el módulo para AMPL.
-* **AMPL:** Para problemas académicos pequeños y pruebas de concepto de evaluación no requiere activación de licencia comercial. No se incluyeron credenciales, tokens ni archivos de licencia en el repositorio.
+* **HiGHS Solver:** Software libre y de código abierto (*open source*, licencia MIT).
+* **AMPL Engine:** Software propietario. Dispone de modalidades gratuitas y académicas (como AMPL Community Edition) sujetas a sus términos de licencia.
+* **amplpy:** Conector y API de Python oficial de AMPL (licencia BSD 3-Clause).

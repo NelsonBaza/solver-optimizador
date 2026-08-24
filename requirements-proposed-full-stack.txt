@@ -1,0 +1,41 @@
+# ==============================================================================
+# PROPUESTA PRELIMINAR / HISTÓRICA DE STACK COMPLETO (FASE DE DISEÑO)
+# ==============================================================================
+# AVISO IMPORTANTE:
+# Este archivo contiene una propuesta de dependencias para fases posteriores de
+# desarrollo de la suite completa.
+#
+# - NO representa el entorno actualmente validado en este checkpoint.
+# - NO debe utilizarse todavía para instalar o desplegar el proyecto.
+# - Cada uno de estos componentes será evaluado e integrado individualmente
+#   en su respectiva fase tras validar las pruebas de concepto pertinentes.
+#
+# Para el entorno activo y validado actualmente, utilice: requirements-ampl.txt
+# ==============================================================================
+
+# Core scientific stack (propuesto)
+numpy>=2.2.1
+pandas>=2.2.3
+scipy>=1.15.1
+matplotlib>=3.10.0
+
+# Mathematical modeling and solvers (propuestos)
+pyomo>=6.10.1
+highspy>=1.15.1
+pyscipopt>=6.2.1
+idaes-pse>=2.12.0
+pymoo>=0.6.2
+
+# Safe AST & Symbolic Expressions (propuesto)
+sympy>=1.14.0
+pydantic>=2.13.2
+
+# Interactive Web Application & Visualization (propuesto)
+streamlit>=1.62.0
+
+# File Formats & Export (propuesto)
+openpyxl>=3.1.5
+XlsxWriter>=3.2.0
+
+# Testing & Quality (propuesto)
+pytest>=9.1.1

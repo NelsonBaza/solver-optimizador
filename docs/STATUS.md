@@ -5,9 +5,10 @@
 * **Python (Global):** `3.13.1` (MSC v.1942 64-bit AMD64)
 * **Python (.venv):** `3.13.1` (`E:\AI\solver-optimizador\.venv\Scripts\python.exe`)
 * **Gestor de paquetes (pip en .venv):** `24.3.1`
-* **amplpy:** `0.18.0`
-* **AMPL Engine (`ampl-module-base`):** `20260809`
-* **HiGHS Solver (`ampl-module-highs`):** `1.15.1` (módulo AMPL `20260813`)
+* **amplpy:** `0.18.0` (fijado en `requirements-ampl.txt`)
+* **ampltools:** `0.7.5` (fijado en `requirements-ampl.txt`)
+* **AMPL Engine (`ampl-module-base`):** `20260809` (módulo binario propietario con modalidad gratuita/académica)
+* **HiGHS Solver (`ampl-module-highs`):** `1.15.1` (módulo AMPL `20260813`, solver open source MIT)
 
 ---
 
@@ -36,45 +37,51 @@ Resultados:
 | Archivo / Carpeta | Descripción |
 | :--- | :--- |
 | [`verify_ampl_highs.py`](../verify_ampl_highs.py) | Script de prueba y verificación reproducible con aserciones programáticas. |
-| [`requirements-ampl.txt`](../requirements-ampl.txt) | Dependencias de Python para la prueba de concepto (`amplpy`, `ampltools`). |
-| [`requirements.txt`](../requirements.txt) | Referencia del stack científico evaluado para el proyecto global. |
-| [`pyproject.toml`](../pyproject.toml) | Configuración de empaquetado del proyecto. |
+| [`requirements-ampl.txt`](../requirements-ampl.txt) | Dependencias fijadas y verificadas del entorno actual (`amplpy==0.18.0`, `ampltools==0.7.5`). |
+| [`requirements-proposed-full-stack.txt`](../requirements-proposed-full-stack.txt) | Propuesta preliminar de dependencias para fases futuras (no instalado en este checkpoint). |
+| [`pyproject.toml`](../pyproject.toml) | Configuración de empaquetado alineada exclusivamente con el entorno validado. |
 | [`.gitignore`](../.gitignore) | Exclusiones de Git (entornos virtuales, temporales de solvers, logs, cachés). |
-| [`README.md`](../README.md) | Documento principal con alcance, instrucciones y limitaciones. |
+| [`README.md`](../README.md) | Documento principal con alcance, licencias, instrucciones y limitaciones. |
 | [`docs/STATUS.md`](STATUS.md) | Este documento (fotografía técnica actual). |
 | [`docs/ENVIRONMENT.md`](ENVIRONMENT.md) | Guía detallada del entorno, instalación y diferencias de componentes. |
-| [`docs/DECISIONS.md`](DECISIONS.md) | Registro histórico de decisiones técnicas y arquitectónicas. |
+| [`docs/DECISIONS.md`](DECISIONS.md) | Registro histórico de decisiones técnicas y arquitectónicas (ADR). |
 | [`docs/agent_logs/`](agent_logs/) | Auditoría y trazabilidad de interacciones y reportes del agente de IA. |
 
 ---
 
-## 3. Componentes Instalados vs. Pendientes
+## 3. Estado de Validación de Componentes
 
-### Instalados en `.venv`:
+### Componentes Validados en `.venv`:
 - [x] Python `3.13.1` (entorno aislado)
-- [x] `amplpy` 0.18.0
-- [x] `ampltools` 0.7.5
+- [x] `amplpy==0.18.0`
+- [x] `ampltools==0.7.5`
 - [x] Módulo AMPL Base (`ampl.exe` 20260809)
 - [x] Módulo AMPL HiGHS (`highs.exe` 1.15.1)
+- [x] Script de prueba `verify_ampl_highs.py`
 
-### Pendientes para fases posteriores:
+### Componentes y Metodologías Todavía NO Validados:
+- [ ] Benchmark A (problema biobjetivo)
+- [ ] Métodos multiobjetivo (matriz de pagos, puntos ideal y nadir)
+- [ ] Método de suma ponderada y normalización
+- [ ] Método de $\varepsilon$-restricciones
+- [ ] Análisis de dominancia de Pareto
 - [ ] IPOPT (ampl-module-ipopt / binarios IDAES / Pyomo ASL)
 - [ ] SCIP (PySCIPOpt / ampl-module-scip)
-- [ ] Pyomo (como backend comparativo frente a AMPL)
-- [ ] pymoo (para algoritmos genéticos multiobjetivo como NSGA-II)
+- [ ] Pyomo (backend alternativo)
+- [ ] pymoo (algoritmos evolutivos multiobjetivo como NSGA-II)
 - [ ] Streamlit (interfaz gráfica interactiva)
-- [ ] Benchmark A (problema biobjetivo con frontera de Pareto)
+- [ ] Decisión final sobre la arquitectura del sistema
 
 ---
 
-## 4. Problemas Encontrados y Advertencias
+## 4. Clasificación de Licencias y Advertencias
 
-1. **Gestión de Ejecutables de Módulos:** `amplpy.modules` descarga binarios directamente en el directorio del paquete (`site-packages/ampl_module_*`). Es obligatorio llamar a `modules.load()` antes de instanciar `AMPL()` para que las rutas sean accesibles en el `PATH` del proceso.
-2. **Compatibilidad Python 3.13:** Los paquetes `amplpy` y los módulos precompilados funcionan correctamente en Python 3.13 sobre Windows (x86_64).
-3. **Licencia:** El solver HiGHS es software libre de código abierto. AMPL en modo base/evaluación permite resolver modelos pequeños sin requerir configuración adicional de licencias comerciales.
+1. **HiGHS:** Software libre y de código abierto (*open source*, licencia MIT).
+2. **AMPL:** Software comercial propietario. Dispone de licencias de evaluación académica y comunitarias (AMPL Community Edition) sujetas a sus términos de servicio.
+3. **Módulos AMPL:** La función `modules.load()` debe llamarse antes de instanciar `AMPL()` para registrar los binarios en el `PATH` del proceso.
 
 ---
 
-## 5. Próximo Hito / Benchmark Previsto
+## 5. Próximo Hito Previsto
 
 * **Hito siguiente:** Formulación y resolución del **Benchmark A (Problema Biobjetivo)** para comparar la resolución monoobjetivo individual, construcción de matriz de pagos y puntos ideal/nadir.

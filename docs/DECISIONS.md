@@ -33,3 +33,15 @@ Este documento registra cronológicamente las decisiones de arquitectura, diseñ
 * **Contexto:** Se requiere auditar las acciones, comandos ejecutados y afirmaciones técnicas realizadas por asistentes de inteligencia artificial a lo largo de las distintas fases del desarrollo.
 * **Decisión:** Establecer una política obligatoria por la cual cada fase o benchmark relevante genere un informe Markdown en `docs/agent_logs/` antes de cada commit.
 * **Consecuencias:** Permite comparar el código real con las afirmaciones del agente y asegura total transparencia y auditabilidad para terceros.
+
+---
+
+## ADR-005: Saneamiento de Checkpoint, Separación de Stack y Rigor en Licencias
+* **Fecha:** 2026-08-23
+* **Contexto:** La auditoría del primer checkpoint identificó que `requirements.txt` y `pyproject.toml` declaraban dependencias no validadas todavía, las versiones no estaban fijadas exactamente en `requirements-ampl.txt`, y no se distinguía con precisión la naturaleza propietaria de AMPL frente a la licencia libre de HiGHS.
+* **Decisión:**
+  1. Fijar versiones exactas en `requirements-ampl.txt` (`amplpy==0.18.0`, `ampltools==0.7.5`).
+  2. Renombrar la propuesta de dependencias completas a `requirements-proposed-full-stack.txt` con encabezado aclaratorio de no instalación en este checkpoint.
+  3. Ajustar `pyproject.toml` para reflejar únicamente las dependencias validadas.
+  4. Precisar en la documentación que HiGHS es open source (MIT), mientras que AMPL es software propietario con modalidades de uso gratuito/académico.
+* **Consecuencias:** El repositorio presenta total coherencia técnica entre archivos de configuración, entorno real y documentación, eliminando ambigüedades antes de abordar el Benchmark A.
