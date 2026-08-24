@@ -1,6 +1,7 @@
 """
 Modulo de serializacion, deserializacion y persistencia de modelos matematicos (JSON).
 Permite guardar y cargar formulaciones completas de manera portable, segura y versionada.
+Incluye normalizacion canonica de restricciones para garantizar coherencia total entre UI y JSON.
 """
 
 import json
@@ -32,10 +33,75 @@ def _safe_float(val: Any) -> float:
     if isinstance(val, (int, float)):
         return float(val)
     if isinstance(val, str):
-        # Aceptar coma o punto decimal
         clean = val.strip().replace(",", ".")
         return float(clean)
     raise ValueError(f"No se puede convertir a numero: {val}")
+
+
+def normalize_constraints(
+    raw_constraints: List[Dict[str, Any]],
+    var_names: List[str],
+) -> List[Dict[str, Any]]:
+    """
+    Normaliza cualquier representacion de restricciones (formato UI aplanado o canonico anidado)
+    a la estructura canonica unica:
+    {
+        "name": str,
+        "coefficients": {v: float for v in var_names},
+        "operator": str ("<=" | ">=" | "="),
+        "rhs": float,
+    }
+    Lanza ValueError si faltan campos obligatorios o los tipos son invalidos.
+    """
+    if not isinstance(raw_constraints, list):
+        raise ValueError(f"Las restricciones deben ser una lista, se recibio: {type(raw_constraints)}")
+
+    canonical_list: List[Dict[str, Any]] = []
+
+    for idx, c in enumerate(raw_constraints):
+        if not isinstance(c, dict):
+            raise ValueError(f"La restriccion #{idx+1} debe ser un diccionario.")
+
+        # 1. Nombre
+        c_name = c.get("name") or c.get("Nombre") or f"Restriccion_{idx+1}"
+        c_name = str(c_name).strip()
+        if not c_name:
+            c_name = f"Restriccion_{idx+1}"
+
+        # 2. Operador
+        c_op = c.get("operator") or c.get("Operador")
+        if c_op is None:
+            raise ValueError(f"La restriccion '{c_name}' no especifica un operador ('<=', '>=', '=').")
+        c_op = str(c_op).strip()
+        if c_op not in ("<=", ">=", "="):
+            raise ValueError(f"Operador no valido '{c_op}' en restriccion '{c_name}'.")
+
+        # 3. Lado derecho (RHS)
+        raw_rhs = c.get("rhs") if "rhs" in c else (c.get("RHS") if "RHS" in c else None)
+        if raw_rhs is None:
+            raise ValueError(f"La restriccion '{c_name}' no especifica un valor de lado derecho (RHS).")
+        rhs_val = _safe_float(raw_rhs)
+
+        # 4. Coeficientes (extraer de 'coefficients' anidado o del dict plano)
+        coeffs_dict: Dict[str, float] = {}
+        nested_coeffs = c.get("coefficients")
+        if isinstance(nested_coeffs, dict):
+            for v in var_names:
+                val = nested_coeffs.get(v, c.get(v, 0.0))
+                coeffs_dict[v] = _safe_float(val)
+        else:
+            for v in var_names:
+                val = c.get(v, 0.0)
+                coeffs_dict[v] = _safe_float(val)
+
+        canonical_list.append({
+            "name": c_name,
+            "coefficients": coeffs_dict,
+            "operator": c_op,
+            "rhs": rhs_val,
+        })
+
+    return canonical_list
 
 
 def validate_model_dict(data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
@@ -115,32 +181,17 @@ def validate_model_dict(data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
                 except Exception:
                     return False, f"Coeficiente no numerico para la variable '{v}' en {obj_key}."
 
-    # 5. Validar restricciones
+    # 5. Validar restricciones mediante normalizacion
     constraints = problem.get("constraints")
     if not isinstance(constraints, list):
         return False, "El campo 'constraints' debe ser una lista de restricciones."
     if len(constraints) == 0:
         return False, "El modelo debe incluir al menos una restriccion."
 
-    for idx, c in enumerate(constraints):
-        if not isinstance(c, dict):
-            return False, f"La restriccion en la posicion {idx+1} debe ser un diccionario."
-        c_name = c.get("name", f"R_{idx+1}")
-        op = c.get("operator")
-        if op not in ("<=", ">=", "="):
-            return False, f"Operador invalido en restriccion '{c_name}': '{op}'."
-        try:
-            _safe_float(c.get("rhs", 0.0))
-        except Exception:
-            return False, f"Valor de lado derecho (RHS) no numerico en restriccion '{c_name}'."
-        c_coeffs = c.get("coefficients", {})
-        if not isinstance(c_coeffs, dict):
-            return False, f"Los coeficientes de la restriccion '{c_name}' deben ser un diccionario."
-        for v in variables:
-            try:
-                _safe_float(c_coeffs.get(v, 0.0))
-            except Exception:
-                return False, f"Coeficiente no numerico para variable '{v}' en restriccion '{c_name}'."
+    try:
+        normalize_constraints(constraints, variables)
+    except Exception as e:
+        return False, f"Error en restricciones: {e}"
 
     return True, None
 
@@ -151,14 +202,19 @@ def serialize_model(
 ) -> str:
     """
     Serializa la formulacion del problema y su metadata a una cadena JSON determinista e indentada.
+    Normaliza obligatoriamente las restricciones para asegurar integridad absoluta.
     """
+    raw_meta_name = (metadata or {}).get("name", "")
+    clean_meta_name = str(raw_meta_name).strip() if raw_meta_name else ""
+    if not clean_meta_name:
+        clean_meta_name = "Modelo de Optimizacion"
+
     meta = {
-        "name": (metadata or {}).get("name", "Modelo de Optimizacion"),
-        "description": (metadata or {}).get("description", ""),
+        "name": clean_meta_name,
+        "description": str((metadata or {}).get("description", "")).strip(),
         "created_with": "solver-optimizador",
     }
 
-    # Asegurar que los coeficientes y numeros sean floats puros
     prob_type = problem_dict.get("type", "Monoobjetivo")
     var_names = list(problem_dict.get("variables", ["x1", "x2"]))
 
@@ -195,17 +251,9 @@ def serialize_model(
             "custom_a1": float(mo_settings.get("custom_a1", 0.5)),
         }
 
-    # Restricciones
-    cons_clean = []
-    for idx, c in enumerate(problem_dict.get("constraints", [])):
-        c_coeffs_raw = c.get("coefficients", {})
-        cons_clean.append({
-            "name": str(c.get("name", f"Restriccion {idx+1}")).strip(),
-            "coefficients": {v: _safe_float(c_coeffs_raw.get(v, 0.0)) for v in var_names},
-            "operator": str(c.get("operator", "<=")),
-            "rhs": _safe_float(c.get("rhs", 0.0)),
-        })
-    prob_clean["constraints"] = cons_clean
+    # Restricciones normalizadas
+    raw_cons = problem_dict.get("constraints", [])
+    prob_clean["constraints"] = normalize_constraints(raw_cons, var_names)
 
     full_data = {
         "schema_version": SCHEMA_VERSION,
@@ -235,24 +283,27 @@ def deserialize_model(json_str: str) -> Dict[str, Any]:
     var_names = list(problem.get("variables", []))
     prob_type = problem.get("type", "Monoobjetivo")
 
+    # Normalizar restricciones para asegurar consistencia
+    canonical_cons = normalize_constraints(problem.get("constraints", []), var_names)
+
     # Adaptar restricciones a formato amigable de dataframe / session_state
     constraints_data = []
-    for c in problem.get("constraints", []):
+    for c in canonical_cons:
         row = {
-            "name": c.get("name", "Restriccion"),
-            "operator": c.get("operator", "<="),
-            "rhs": _safe_float(c.get("rhs", 0.0)),
+            "name": c["name"],
+            "operator": c["operator"],
+            "rhs": c["rhs"],
         }
-        c_coeffs = c.get("coefficients", {})
         for v in var_names:
-            row[v] = _safe_float(c_coeffs.get(v, 0.0))
+            row[v] = c["coefficients"][v]
         constraints_data.append(row)
 
+    meta_name = str(metadata.get("name", "")).strip() or "Modelo Importado"
     res: Dict[str, Any] = {
         "schema_version": data.get("schema_version"),
         "metadata": {
-            "name": metadata.get("name", "Modelo Importado"),
-            "description": metadata.get("description", ""),
+            "name": meta_name,
+            "description": str(metadata.get("description", "")).strip(),
         },
         "problem_type": prob_type,
         "num_vars": len(var_names),

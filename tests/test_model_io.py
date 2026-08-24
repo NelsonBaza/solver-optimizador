@@ -1,6 +1,6 @@
 """
-Suite de pruebas unitarias para la serializacion, deserializacion y persistencia de modelos (model_io).
-Incluye la prueba obligatoria de round-trip y resolucion del modelo hidroelectrico de 8 variables.
+Suite de pruebas unitarias para la serializacion, deserializacion, normalizacion y persistencia de modelos (model_io).
+Incluye la prueba del caso exacto que origino el reporte de auditoria (MAX 10x1 + 15x2).
 """
 
 import json
@@ -21,6 +21,7 @@ from solver_optimizador.model_io import (
     serialize_model,
     deserialize_model,
     validate_model_dict,
+    normalize_constraints,
     sanitize_filename,
     SCHEMA_VERSION,
 )
@@ -30,6 +31,128 @@ def test_sanitize_filename():
     assert sanitize_filename("Generacion hidroelectrica 4 periodos") == "generacion_hidroelectrica_4_periodos.json"
     assert sanitize_filename("Modelo #1 / Tarea (2026)") == "modelo_1_tarea_2026.json"
     assert sanitize_filename("") == "modelo_optimizacion.json"
+
+
+def test_exact_bug_case_10x1_15x2_preservation():
+    """
+    Reproduce exactamente el caso que detecto la falla en pruebas reales:
+    MAX Z = 10 x1 + 15 x2
+    5 x1 + 4 x2 <= 15
+    3 x1 + 1 x2 <= 20
+    En formato real de salida de st.data_editor (Nombre, x1, x2, Operador, RHS).
+    Valida:
+    - Normalizacion canonica.
+    - JSON exportado con coeficientes y RHS no nulos.
+    - Deserializacion fiel.
+    - Coincidencia de resolucion Z* y firma antes y despues.
+    """
+    var_names = ["x1", "x2"]
+    obj_coeffs = {"x1": 10.0, "x2": 15.0}
+
+    # Formato real devuelto por st.data_editor
+    ui_constraints = [
+        {"Nombre": "Restriccion 1", "x1": 5.0, "x2": 4.0, "Operador": "<=", "RHS": 15.0},
+        {"Nombre": "Restriccion 2", "x1": 3.0, "x2": 1.0, "Operador": "<=", "RHS": 20.0},
+    ]
+
+    # 1. Normalizar
+    canonical_cons = normalize_constraints(ui_constraints, var_names)
+    assert len(canonical_cons) == 2
+    assert canonical_cons[0]["name"] == "Restriccion 1"
+    assert canonical_cons[0]["coefficients"] == {"x1": 5.0, "x2": 4.0}
+    assert canonical_cons[0]["operator"] == "<="
+    assert canonical_cons[0]["rhs"] == 15.0
+
+    assert canonical_cons[1]["name"] == "Restriccion 2"
+    assert canonical_cons[1]["coefficients"] == {"x1": 3.0, "x2": 1.0}
+    assert canonical_cons[1]["operator"] == "<="
+    assert canonical_cons[1]["rhs"] == 20.0
+
+    # 2. Resolver modelo original
+    prob_orig = LPProblem(
+        variables=var_names,
+        objective=LinearObjective("Z", Sense.MAXIMIZE, obj_coeffs),
+        constraints=[
+            LinearConstraint(c["name"], c["coefficients"], Operator.from_str(c["operator"]), c["rhs"])
+            for c in canonical_cons
+        ],
+    )
+    sol_orig = solve_lp(prob_orig)
+    assert sol_orig.status == SolverStatus.OPTIMAL
+    z_expected = sol_orig.objective_value
+    assert z_expected > 0.0
+
+    # 3. Serializar pasando los registros de la UI directamente
+    prob_dict = {
+        "type": "Monoobjetivo",
+        "variables": var_names,
+        "mono_objective": {"sense": "Maximizar", "coefficients": obj_coeffs},
+        "constraints": ui_constraints,
+    }
+    json_str = serialize_model(prob_dict, {"name": "Modelo Prueba 2"})
+
+    # 4. Inspeccionar el JSON crudo para garantizar que NO se guardaron ceros
+    raw_parsed = json.loads(json_str)
+    c1_json = raw_parsed["problem"]["constraints"][0]
+    assert c1_json["name"] == "Restriccion 1"
+    assert c1_json["coefficients"]["x1"] == 5.0
+    assert c1_json["coefficients"]["x2"] == 4.0
+    assert c1_json["rhs"] == 15.0
+
+    c2_json = raw_parsed["problem"]["constraints"][1]
+    assert c2_json["name"] == "Restriccion 2"
+    assert c2_json["coefficients"]["x1"] == 3.0
+    assert c2_json["coefficients"]["x2"] == 1.0
+    assert c2_json["rhs"] == 20.0
+
+    # 5. Deserializar y reconstruir problema
+    loaded = deserialize_model(json_str)
+    prob_loaded = LPProblem(
+        variables=loaded["var_names"],
+        objective=LinearObjective("Z", Sense.from_str(loaded["obj_sense"]), loaded["obj_coeffs"]),
+        constraints=[
+            LinearConstraint(
+                c["name"],
+                {v: c[v] for v in loaded["var_names"]},
+                Operator.from_str(c["operator"]),
+                c["rhs"],
+            )
+            for c in loaded["constraints_data"]
+        ],
+    )
+    sol_loaded = solve_lp(prob_loaded)
+    assert sol_loaded.status == SolverStatus.OPTIMAL
+    assert pytest.approx(sol_loaded.objective_value, rel=1e-5) == z_expected
+
+    # 6. Firmas coinciden
+    sig_before = build_model_signature("Monoobjetivo", var_names, "Maximizar", obj_coeffs, constraints_data=canonical_cons)
+    sig_after = build_model_signature("Monoobjetivo", loaded["var_names"], loaded["obj_sense"], loaded["obj_coeffs"], constraints_data=loaded["constraints_data"])
+    assert sig_before == sig_after
+
+
+def test_normalize_constraints_validation_errors():
+    """Valida que estructuras invalidas en restricciones lancen ValueError con mensaje claro."""
+    var_names = ["x1", "x2"]
+
+    # No es lista
+    with pytest.raises(ValueError, match="lista"):
+        normalize_constraints("no es lista", var_names)
+
+    # Elemento no es dict
+    with pytest.raises(ValueError, match="diccionario"):
+        normalize_constraints(["no_dict"], var_names)
+
+    # Falta operador
+    with pytest.raises(ValueError, match="operador"):
+        normalize_constraints([{"Nombre": "R1", "RHS": 10.0, "x1": 1.0}], var_names)
+
+    # Operador invalido
+    with pytest.raises(ValueError, match="Operador no valido"):
+        normalize_constraints([{"Nombre": "R1", "Operador": "INVALID", "RHS": 10.0}], var_names)
+
+    # Falta RHS
+    with pytest.raises(ValueError, match="RHS"):
+        normalize_constraints([{"Nombre": "R1", "Operador": "<="}], var_names)
 
 
 def test_serialize_deserialize_mono_roundtrip():
@@ -139,18 +262,8 @@ def test_hydroelectric_model_roundtrip_and_solve():
     - Resolucion del modelo cargado Z* = 6701.25.
     """
     var_names = [f"x{i+1}" for i in range(8)]
-    # MIN Z = 100x5 + 100x6 + 100x7 + 100x8
     obj_coeffs = {v: (100.0 if v in ("x5", "x6", "x7", "x8") else 0.0) for v in var_names}
 
-    # Restricciones
-    # 2.4525x1 + x5 = 60
-    # 2.4525x2 + x6 = 80
-    # 2.4525x3 + x7 = 70
-    # 2.4525x4 + x8 = 90
-    # x1 <= 50
-    # x1+x2 <= 70
-    # x1+x2+x3 <= 85
-    # x1+x2+x3+x4 <= 95
     constraints_raw = [
         {"name": "Demanda P1", "coefficients": {v: (2.4525 if v == "x1" else (1.0 if v == "x5" else 0.0)) for v in var_names}, "operator": "=", "rhs": 60.0},
         {"name": "Demanda P2", "coefficients": {v: (2.4525 if v == "x2" else (1.0 if v == "x6" else 0.0)) for v in var_names}, "operator": "=", "rhs": 80.0},

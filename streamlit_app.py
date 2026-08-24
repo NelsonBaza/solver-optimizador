@@ -647,6 +647,15 @@ with tab_form:
             all_lines = "\\\\\n".join(latex_cons + [vars_nonneg])
             st.latex(f"\\text{{sujeto a:}}\n\\begin{{cases}}\n{all_lines}\n\\end{{cases}}")
 
+    # Normalizar restricciones de forma canonica
+    raw_ui_records = edited_df.to_dict(orient="records") if not edited_df.empty else []
+    try:
+        canonical_constraints = normalize_constraints(raw_ui_records, var_names) if raw_ui_records else []
+        cons_norm_error = None
+    except Exception as e:
+        canonical_constraints = []
+        cons_norm_error = str(e)
+
     # -----------------------------------------------------------------------
     # Boton de Resolucion y Descarga
     # -----------------------------------------------------------------------
@@ -657,14 +666,14 @@ with tab_form:
             "🚀 Resolver Modelo con Pyomo + HiGHS",
             type="primary",
             width="stretch",
-            disabled=has_var_name_error,
+            disabled=bool(has_var_name_error or cons_norm_error),
         )
     with col_act2:
         # Serializar modelo actual para descarga
         curr_export_dict = {
             "type": st.session_state.problem_type,
             "variables": var_names,
-            "constraints": edited_df.to_dict(orient="records") if not edited_df.empty else st.session_state.constraints_data,
+            "constraints": canonical_constraints if canonical_constraints else st.session_state.constraints_data,
         }
         if st.session_state.problem_type == "Monoobjetivo":
             curr_export_dict["mono_objective"] = {
@@ -681,23 +690,26 @@ with tab_form:
                 "num_weights": st.session_state.num_weights,
                 "custom_a1": st.session_state.custom_a1,
             }
-        json_export_str = serialize_model(
-            curr_export_dict,
-            {"name": st.session_state.model_name, "description": st.session_state.model_desc},
-        )
-        st.download_button(
-            label="💾 Descargar Modelo (.json)",
-            data=json_export_str,
-            file_name=sanitize_filename(st.session_state.model_name),
-            mime="application/json",
-            width="stretch",
-        )
+        try:
+            json_export_str = serialize_model(
+                curr_export_dict,
+                {"name": st.session_state.model_name, "description": st.session_state.model_desc},
+            )
+            st.download_button(
+                label="💾 Descargar Modelo (.json)",
+                data=json_export_str,
+                file_name=sanitize_filename(st.session_state.model_name),
+                mime="application/json",
+                width="stretch",
+                disabled=bool(cons_norm_error or has_var_name_error),
+            )
+        except Exception as e:
+            st.error(f"No se pudo preparar la exportacion JSON: {e}")
 
 
 # ---------------------------------------------------------------------------
 # Calculo de la Firma del Modelo Actual
 # ---------------------------------------------------------------------------
-constraints_records = edited_df.to_dict(orient="records") if not edited_df.empty else []
 current_model_signature = build_model_signature(
     problem_type=st.session_state.problem_type,
     var_names=var_names,
@@ -707,7 +719,7 @@ current_model_signature = build_model_signature(
     obj1_coeffs=st.session_state.obj1_coeffs,
     obj2_sense=st.session_state.obj2_sense,
     obj2_coeffs=st.session_state.obj2_coeffs,
-    constraints_data=constraints_records,
+    constraints_data=canonical_constraints,
     mo_mode=st.session_state.mo_mode,
     num_weights=st.session_state.num_weights,
     custom_a1=st.session_state.custom_a1,
@@ -718,53 +730,21 @@ current_model_signature = build_model_signature(
 # LOGICA DE RESOLUCION
 # ===========================================================================
 if btn_solve:
-    constraints_list: List[LinearConstraint] = []
-    has_validation_error = False
-
-    if edited_df.empty:
-        st.error("El problema debe contener al menos una restriccion lineal.")
-        has_validation_error = True
+    if cons_norm_error:
+        st.error(f"Error en restricciones: {cons_norm_error}")
+    elif not canonical_constraints:
+        st.error("El problema debe contener al menos una restriccion lineal valida.")
     else:
-        for idx, row in edited_df.iterrows():
-            c_name = str(row.get("Nombre", f"Restriccion_{idx+1}")).strip()
-            if not c_name:
-                c_name = f"R_{idx+1}"
-            op_str = str(row.get("Operador", "<=")).strip()
-            try:
-                op_enum = Operator.from_str(op_str)
-            except Exception as e:
-                st.error(f"Error en la fila {idx+1}: {e}")
-                has_validation_error = True
-                break
-
-            rhs_val = row.get("RHS")
-            if not is_finite_number(rhs_val):
-                st.error(f"La restriccion '{c_name}' no tiene un valor numerico finito en el lado derecho (RHS): {rhs_val}")
-                has_validation_error = True
-                break
-
-            c_coeffs = {}
-            for v in var_names:
-                c_val = row.get(v)
-                if not is_finite_number(c_val):
-                    st.error(f"El coeficiente de '{v}' en la restriccion '{c_name}' no es un numero finito: {c_val}")
-                    has_validation_error = True
-                    break
-                c_coeffs[v] = float(c_val)
-
-            if has_validation_error:
-                break
-
-            constraints_list.append(
-                LinearConstraint(
-                    name=c_name,
-                    coefficients=c_coeffs,
-                    operator=op_enum,
-                    rhs=float(rhs_val),
-                )
+        constraints_list = [
+            LinearConstraint(
+                name=c["name"],
+                coefficients=c["coefficients"],
+                operator=Operator.from_str(c["operator"]),
+                rhs=c["rhs"],
             )
+            for c in canonical_constraints
+        ]
 
-    if not has_validation_error:
         if st.session_state.problem_type == "Monoobjetivo":
             sense_enum = Sense.from_str(st.session_state.obj_sense)
             problem_mono = LPProblem(
