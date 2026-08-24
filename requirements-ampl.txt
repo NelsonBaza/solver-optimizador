@@ -1,0 +1,3 @@
+# Dependencias para la prueba de concepto AMPL + HiGHS
+amplpy>=0.18.0
+ampltools>=0.7.5
