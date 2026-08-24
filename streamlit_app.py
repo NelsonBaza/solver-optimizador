@@ -660,13 +660,20 @@ with tab_form:
     # Boton de Resolucion y Descarga
     # -----------------------------------------------------------------------
     st.markdown("---")
+    if has_var_name_error:
+        st.error("⚠️ **No es posible resolver ni descargar el modelo:** Existen errores en los nombres de las variables (nombres vacios o duplicados).")
+    elif cons_norm_error:
+        st.error(f"⚠️ **No es posible resolver ni descargar el modelo:** {cons_norm_error}")
+    elif not canonical_constraints:
+        st.warning("⚠️ **No es posible resolver ni descargar el modelo:** Ingrese al menos una restriccion lineal valida en la tabla.")
+
     col_act1, col_act2 = st.columns([2, 1])
     with col_act1:
         btn_solve = st.button(
             "🚀 Resolver Modelo con Pyomo + HiGHS",
             type="primary",
             width="stretch",
-            disabled=bool(has_var_name_error or cons_norm_error),
+            disabled=bool(has_var_name_error or cons_norm_error or not canonical_constraints),
         )
     with col_act2:
         # Serializar modelo actual para descarga
@@ -701,7 +708,7 @@ with tab_form:
                 file_name=sanitize_filename(st.session_state.model_name),
                 mime="application/json",
                 width="stretch",
-                disabled=bool(cons_norm_error or has_var_name_error),
+                disabled=bool(cons_norm_error or has_var_name_error or not canonical_constraints),
             )
         except Exception as e:
             st.error(f"No se pudo preparar la exportacion JSON: {e}")

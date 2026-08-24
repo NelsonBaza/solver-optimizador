@@ -90,7 +90,17 @@ canonical_constraints
 
 ---
 
-## 4. Validación y Pruebas Automatizadas
+## 4. Filtrado de Filas Dinámicas Vacías y Validación
+
+Para soportar tablas con `num_rows="dynamic"` en `st.data_editor`:
+* Se implementó `is_empty_constraint_row(row, var_names)` que distingue filas completamente vacías (`None`, `NaN`, cadenas vacías) de filas parcialmente diligenciadas o con ceros válidos.
+* Las filas totalmente vacías son ignoradas automáticamente por `normalize_constraints`, permitiendo al usuario ver la fila de inserción sin bloquear los botones **Resolver** y **Descargar**.
+* Las filas incompletas generan errores descriptivos (ej. `La restricción 'R3' no especifica un operador`).
+* La interfaz muestra un aviso visible si existen errores de validación.
+
+---
+
+## 5. Validación y Pruebas Automatizadas
 
 1. **Caso Exacto $\max 10x_1 + 15x_2$ (`test_exact_bug_case_10x1_15x2_preservation`):**
    * Coeficientes y RHS preservados fielmente en el JSON crudo.
@@ -99,5 +109,7 @@ canonical_constraints
    * Normalización de registros planos con variables como `T1, GT1`.
 3. **Caso Hidroeléctrico 24 Variables (`test_hydroelectric_full_24_vars_model`):**
    * 24 variables y 28 restricciones en formato plano de UI exportadas y cargadas sin pérdida ($Z^* = 6701.25$).
-4. **Validación de Errores (`test_normalize_constraints_validation_errors`):**
-   * Detección y rechazo de restricciones malformadas.
+4. **Filtrado de Fila Vacía (`test_empty_dynamic_constraint_row_filtering` y `test_mono_model_min_15x1_23x2_with_trailing_empty_row`):**
+   * Dos restricciones reales + fila vacía dinámica se resuelven y guardan exactamente como 2 restricciones.
+5. **Validación de Errores (`test_normalize_constraints_validation_errors` y `test_partially_filled_constraint_row_produces_clear_error`):**
+   * Detección y rechazo de restricciones malformadas o incompletas.

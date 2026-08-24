@@ -1,9 +1,11 @@
 """
 Suite de pruebas unitarias para la serializacion, deserializacion, normalizacion y persistencia de modelos (model_io).
-Incluye la prueba del caso exacto que origino el reporte de auditoria (MAX 10x1 + 15x2).
+Incluye la prueba del caso exacto que origino el reporte de auditoria (MAX 10x1 + 15x2) y el filtrado
+de filas dinamicas vacias en la tabla de restricciones.
 """
 
 import json
+import math
 import pytest
 from solver_optimizador.lp_models import (
     Sense,
@@ -22,6 +24,7 @@ from solver_optimizador.model_io import (
     deserialize_model,
     validate_model_dict,
     normalize_constraints,
+    is_empty_constraint_row,
     sanitize_filename,
     SCHEMA_VERSION,
 )
@@ -33,6 +36,122 @@ def test_sanitize_filename():
     assert sanitize_filename("") == "modelo_optimizacion.json"
 
 
+def test_is_empty_constraint_row_cases():
+    """Valida la identificacion exacta de filas totalmente vacias frente a filas diligenciadas o ceros validos."""
+    var_names = ["x1", "x2"]
+
+    # Fila completamente vacia con None
+    assert is_empty_constraint_row({"Nombre": None, "x1": None, "x2": None, "Operador": None, "RHS": None}, var_names) is True
+
+    # Fila completamente vacia con NaN
+    assert is_empty_constraint_row({"Nombre": float("nan"), "x1": float("nan"), "x2": float("nan"), "Operador": float("nan"), "RHS": float("nan")}, var_names) is True
+
+    # Fila completamente vacia con strings vacios
+    assert is_empty_constraint_row({"Nombre": "", "x1": "  ", "x2": "", "Operador": "", "RHS": ""}, var_names) is True
+
+    # Fila completamente vacia en formato anidado
+    assert is_empty_constraint_row({"name": None, "operator": None, "rhs": None, "coefficients": {"x1": None, "x2": None}}, var_names) is True
+
+    # Fila con ceros validos (NO es vacia)
+    assert is_empty_constraint_row({"Nombre": "R1", "x1": 0.0, "x2": 1.0, "Operador": "<=", "RHS": 10.0}, var_names) is False
+    assert is_empty_constraint_row({"Nombre": "", "x1": 0.0, "x2": 0.0, "Operador": "", "RHS": None}, var_names) is False
+
+    # Fila parcialmente diligenciada (NO es vacia)
+    assert is_empty_constraint_row({"Nombre": "R1", "x1": None, "x2": None, "Operador": None, "RHS": None}, var_names) is False
+    assert is_empty_constraint_row({"Nombre": None, "x1": 5.0, "x2": None, "Operador": None, "RHS": None}, var_names) is False
+
+
+def test_empty_dynamic_constraint_row_filtering():
+    """Valida que una fila dinamica vacia al final sea ignorada sin generar error."""
+    var_names = ["x1", "x2"]
+    raw_rows = [
+        {"Nombre": "Restriccion 1", "x1": 10.0, "x2": 5.0, "Operador": "<=", "RHS": 130.0},
+        {"Nombre": "Restriccion 2", "x1": 2.0, "x2": 13.0, "Operador": "<=", "RHS": 250.0},
+        {"Nombre": None, "x1": None, "x2": None, "Operador": None, "RHS": None},
+    ]
+
+    canonical = normalize_constraints(raw_rows, var_names)
+    assert len(canonical) == 2
+    assert canonical[0]["name"] == "Restriccion 1"
+    assert canonical[0]["coefficients"] == {"x1": 10.0, "x2": 5.0}
+    assert canonical[0]["rhs"] == 130.0
+    assert canonical[1]["name"] == "Restriccion 2"
+    assert canonical[1]["coefficients"] == {"x1": 2.0, "x2": 13.0}
+    assert canonical[1]["rhs"] == 250.0
+
+
+def test_partially_filled_constraint_row_produces_clear_error():
+    """Valida que filas incompletas produzcan errores claros y descriptivos."""
+    var_names = ["x1", "x2"]
+
+    # Falta operador en fila no vacia
+    incomplete_op = [
+        {"Nombre": "Restriccion 3", "x1": 1.0, "x2": 0.0, "Operador": None, "RHS": 50.0}
+    ]
+    with pytest.raises(ValueError, match="no especifica un operador"):
+        normalize_constraints(incomplete_op, var_names)
+
+    # Falta RHS en fila no vacia
+    incomplete_rhs = [
+        {"Nombre": "Restriccion 3", "x1": 1.0, "x2": 0.0, "Operador": "<=", "RHS": None}
+    ]
+    with pytest.raises(ValueError, match="no especifica un valor de lado derecho"):
+        normalize_constraints(incomplete_rhs, var_names)
+
+
+def test_mono_model_min_15x1_23x2_with_trailing_empty_row():
+    """
+    Valida el caso de prueba reportado por el usuario:
+    MIN Z = 15x1 + 23x2
+    10x1 + 5x2 <= 130
+    2x1 + 13x2 <= 250
+    + fila vacia adicional de st.data_editor.
+    """
+    var_names = ["x1", "x2"]
+    obj_coeffs = {"x1": 15.0, "x2": 23.0}
+
+    ui_constraints = [
+        {"Nombre": "R1", "x1": 10.0, "x2": 5.0, "Operador": "<=", "RHS": 130.0},
+        {"Nombre": "R2", "x1": 2.0, "x2": 13.0, "Operador": "<=", "RHS": 250.0},
+        {"Nombre": float("nan"), "x1": None, "x2": None, "Operador": None, "RHS": None},
+    ]
+
+    canonical = normalize_constraints(ui_constraints, var_names)
+    assert len(canonical) == 2
+
+    # Resolver problema
+    prob = LPProblem(
+        variables=var_names,
+        objective=LinearObjective("Z", Sense.MINIMIZE, obj_coeffs),
+        constraints=[
+            LinearConstraint(c["name"], c["coefficients"], Operator.from_str(c["operator"]), c["rhs"])
+            for c in canonical
+        ],
+    )
+    sol = solve_lp(prob)
+    assert sol.status == SolverStatus.OPTIMAL
+    assert pytest.approx(sol.objective_value, abs=1e-5) == 0.0
+    assert pytest.approx(sol.variable_values["x1"], abs=1e-5) == 0.0
+    assert pytest.approx(sol.variable_values["x2"], abs=1e-5) == 0.0
+
+    # Serializar y deserializar
+    json_str = serialize_model(
+        {
+            "type": "Monoobjetivo",
+            "variables": var_names,
+            "mono_objective": {"sense": "Minimizar", "coefficients": obj_coeffs},
+            "constraints": ui_constraints,
+        },
+        {"name": "Modelo Minimo"},
+    )
+    loaded = deserialize_model(json_str)
+    assert len(loaded["constraints_data"]) == 2
+    assert loaded["constraints_data"][0]["x1"] == 10.0
+    assert loaded["constraints_data"][0]["x2"] == 5.0
+    assert loaded["constraints_data"][1]["x1"] == 2.0
+    assert loaded["constraints_data"][1]["x2"] == 13.0
+
+
 def test_exact_bug_case_10x1_15x2_preservation():
     """
     Reproduce exactamente el caso que detecto la falla en pruebas reales:
@@ -40,16 +159,10 @@ def test_exact_bug_case_10x1_15x2_preservation():
     5 x1 + 4 x2 <= 15
     3 x1 + 1 x2 <= 20
     En formato real de salida de st.data_editor (Nombre, x1, x2, Operador, RHS).
-    Valida:
-    - Normalizacion canonica.
-    - JSON exportado con coeficientes y RHS no nulos.
-    - Deserializacion fiel.
-    - Coincidencia de resolucion Z* y firma antes y despues.
     """
     var_names = ["x1", "x2"]
     obj_coeffs = {"x1": 10.0, "x2": 15.0}
 
-    # Formato real devuelto por st.data_editor
     ui_constraints = [
         {"Nombre": "Restriccion 1", "x1": 5.0, "x2": 4.0, "Operador": "<=", "RHS": 15.0},
         {"Nombre": "Restriccion 2", "x1": 3.0, "x2": 1.0, "Operador": "<=", "RHS": 20.0},

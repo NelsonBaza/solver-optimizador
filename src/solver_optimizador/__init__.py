@@ -25,6 +25,7 @@ from .model_io import (
     deserialize_model,
     validate_model_dict,
     normalize_constraints,
+    is_empty_constraint_row,
     sanitize_filename,
     SCHEMA_VERSION,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "deserialize_model",
     "validate_model_dict",
     "normalize_constraints",
+    "is_empty_constraint_row",
     "sanitize_filename",
     "SCHEMA_VERSION",
     "plot_feasible_region_2d",

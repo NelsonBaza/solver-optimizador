@@ -1,10 +1,11 @@
 """
 Modulo de serializacion, deserializacion y persistencia de modelos matematicos (JSON).
 Permite guardar y cargar formulaciones completas de manera portable, segura y versionada.
-Incluye normalizacion canonica de restricciones para garantizar coherencia total entre UI y JSON.
+Incluye normalizacion canonica de restricciones y filtrado de filas dinamicas vacias.
 """
 
 import json
+import math
 import re
 from typing import Dict, Any, Optional, Tuple, List
 
@@ -18,7 +19,6 @@ def sanitize_filename(name: str) -> str:
     """
     if not name or not name.strip():
         return "modelo_optimizacion.json"
-    # Reemplazar caracteres no alfanumericos por guion bajo
     s = re.sub(r"[^\w\s-]", "", name.strip()).strip()
     s = re.sub(r"[-\s]+", "_", s).lower()
     if not s:
@@ -28,14 +28,77 @@ def sanitize_filename(name: str) -> str:
     return s
 
 
+def _is_blank_value(val: Any) -> bool:
+    """
+    Determina si un valor esta vacio (None, NaN, string vacio o espacios).
+    Nota: 0 y 0.0 NO son valores vacios.
+    """
+    if val is None:
+        return True
+    if isinstance(val, (int, float)):
+        if isinstance(val, bool):
+            return False
+        return math.isnan(val)
+    if isinstance(val, str):
+        s = val.strip()
+        return s == "" or s.lower() == "nan" or s.lower() == "none"
+    return False
+
+
 def _safe_float(val: Any) -> float:
     """Convierte de forma segura un valor numerico o string (incluso con coma decimal) a float."""
+    if _is_blank_value(val):
+        raise ValueError(f"No se puede convertir un valor vacio/NaN a numero: {val}")
     if isinstance(val, (int, float)):
         return float(val)
     if isinstance(val, str):
         clean = val.strip().replace(",", ".")
         return float(clean)
     raise ValueError(f"No se puede convertir a numero: {val}")
+
+
+def is_empty_constraint_row(row: Dict[str, Any], var_names: Optional[List[str]] = None) -> bool:
+    """
+    Determina si una fila de restricciones esta completamente vacia.
+    Una fila se considera totalmente vacia si:
+    - Nombre esta vacio o NaN
+    - Operador esta vacio o NaN
+    - RHS esta vacio o NaN
+    - Todos los coeficientes de variables estan vacios o NaN.
+    Si cualquier campo contiene un valor real (incluyendo el numero 0.0), la fila NO se considera vacia.
+    """
+    if not isinstance(row, dict):
+        return False
+
+    # 1. Comprobar nombre
+    c_name = row.get("name") if "name" in row else row.get("Nombre")
+    if not _is_blank_value(c_name):
+        return False
+
+    # 2. Comprobar operador
+    c_op = row.get("operator") if "operator" in row else row.get("Operador")
+    if not _is_blank_value(c_op):
+        return False
+
+    # 3. Comprobar RHS
+    c_rhs = row.get("rhs") if "rhs" in row else row.get("RHS")
+    if not _is_blank_value(c_rhs):
+        return False
+
+    # 4. Comprobar coeficientes
+    nested_coeffs = row.get("coefficients")
+    if isinstance(nested_coeffs, dict):
+        for v in nested_coeffs.values():
+            if not _is_blank_value(v):
+                return False
+    else:
+        check_keys = var_names if var_names is not None else [k for k in row.keys() if k not in ("name", "Nombre", "operator", "Operador", "rhs", "RHS")]
+        for k in check_keys:
+            v = row.get(k)
+            if not _is_blank_value(v):
+                return False
+
+    return True
 
 
 def normalize_constraints(
@@ -51,7 +114,8 @@ def normalize_constraints(
         "operator": str ("<=" | ">=" | "="),
         "rhs": float,
     }
-    Lanza ValueError si faltan campos obligatorios o los tipos son invalidos.
+    Filtra automaticamente filas completamente vacias (como la fila dinamica de st.data_editor).
+    Lanza ValueError con mensaje descriptivo si faltan campos obligatorios en filas parcialmente diligenciadas.
     """
     if not isinstance(raw_constraints, list):
         raise ValueError(f"Las restricciones deben ser una lista, se recibio: {type(raw_constraints)}")
@@ -62,23 +126,30 @@ def normalize_constraints(
         if not isinstance(c, dict):
             raise ValueError(f"La restriccion #{idx+1} debe ser un diccionario.")
 
+        # Ignorar filas completamente vacias
+        if is_empty_constraint_row(c, var_names):
+            continue
+
         # 1. Nombre
-        c_name = c.get("name") or c.get("Nombre") or f"Restriccion_{idx+1}"
-        c_name = str(c_name).strip()
-        if not c_name:
+        raw_name = c.get("name") if "name" in c else c.get("Nombre")
+        if _is_blank_value(raw_name):
             c_name = f"Restriccion_{idx+1}"
+        else:
+            c_name = str(raw_name).strip()
+            if not c_name:
+                c_name = f"Restriccion_{idx+1}"
 
         # 2. Operador
-        c_op = c.get("operator") or c.get("Operador")
-        if c_op is None:
+        raw_op = c.get("operator") if "operator" in c else c.get("Operador")
+        if _is_blank_value(raw_op):
             raise ValueError(f"La restriccion '{c_name}' no especifica un operador ('<=', '>=', '=').")
-        c_op = str(c_op).strip()
+        c_op = str(raw_op).strip()
         if c_op not in ("<=", ">=", "="):
             raise ValueError(f"Operador no valido '{c_op}' en restriccion '{c_name}'.")
 
         # 3. Lado derecho (RHS)
         raw_rhs = c.get("rhs") if "rhs" in c else (c.get("RHS") if "RHS" in c else None)
-        if raw_rhs is None:
+        if _is_blank_value(raw_rhs):
             raise ValueError(f"La restriccion '{c_name}' no especifica un valor de lado derecho (RHS).")
         rhs_val = _safe_float(raw_rhs)
 
@@ -87,12 +158,18 @@ def normalize_constraints(
         nested_coeffs = c.get("coefficients")
         if isinstance(nested_coeffs, dict):
             for v in var_names:
-                val = nested_coeffs.get(v, c.get(v, 0.0))
-                coeffs_dict[v] = _safe_float(val)
+                raw_v = nested_coeffs.get(v, c.get(v))
+                if _is_blank_value(raw_v):
+                    coeffs_dict[v] = 0.0
+                else:
+                    coeffs_dict[v] = _safe_float(raw_v)
         else:
             for v in var_names:
-                val = c.get(v, 0.0)
-                coeffs_dict[v] = _safe_float(val)
+                raw_v = c.get(v)
+                if _is_blank_value(raw_v):
+                    coeffs_dict[v] = 0.0
+                else:
+                    coeffs_dict[v] = _safe_float(raw_v)
 
         canonical_list.append({
             "name": c_name,
@@ -185,11 +262,11 @@ def validate_model_dict(data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     constraints = problem.get("constraints")
     if not isinstance(constraints, list):
         return False, "El campo 'constraints' debe ser una lista de restricciones."
-    if len(constraints) == 0:
-        return False, "El modelo debe incluir al menos una restriccion."
 
     try:
-        normalize_constraints(constraints, variables)
+        norm_cons = normalize_constraints(constraints, variables)
+        if len(norm_cons) == 0:
+            return False, "El modelo debe incluir al menos una restriccion valida."
     except Exception as e:
         return False, f"Error en restricciones: {e}"
 
