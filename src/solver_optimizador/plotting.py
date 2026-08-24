@@ -15,13 +15,13 @@ from .lp_models import LPProblem, BiobjectiveProblem, Operator, Sense, is_finite
 def plot_feasible_region_2d(
     problem: Any,
     solutions: Optional[List[Dict[str, Any]]] = None,
-    title: str = "Region Factible y Soluciones Optimas",
+    title: str = "Espacio de variables: Region factible y soluciones",
 ) -> Optional[plt.Figure]:
     """
-    Genera el grafico 2D de la region factible y puntos de solucion.
+    Genera el grafico 2D del espacio de variables (region factible y puntos de solucion).
     Solo disponible cuando el numero de variables es exactamente 2.
     Si la region no es un poligono acotado simple de al menos 3 vertices,
-    dibuja las restricciones y puntos pero no sombrea un poligono inventado.
+    dibuja las restricciones y puntos sin sombrear un poligono inventado.
     """
     if len(problem.variables) != 2:
         return None
@@ -99,8 +99,8 @@ def plot_feasible_region_2d(
             if not any(abs(px - fx) < tol and abs(py - fy) < tol for fx, fy in feasible_pts):
                 feasible_pts.append((px, py))
 
-    # Crear figura
-    fig, ax = plt.subplots(figsize=(8, 6), dpi=150)
+    # Crear figura con estilo limpio
+    fig, ax = plt.subplots(figsize=(7.5, 5.5), dpi=150)
 
     # Trazar lineas de restriccion
     colors = ["#2ca02c", "#ff7f0e", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]
@@ -146,9 +146,9 @@ def plot_feasible_region_2d(
     ax.set_ylim(-limit_y * 0.05, limit_y)
     ax.set_xlabel(f"Variable ${v1}$", fontsize=10, fontweight="bold")
     ax.set_ylabel(f"Variable ${v2}$", fontsize=10, fontweight="bold")
-    ax.set_title(title, fontsize=12, fontweight="bold", pad=12)
+    ax.set_title(title, fontsize=11, fontweight="bold", pad=10)
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="upper right", fontsize=8.5)
+    ax.legend(loc="upper right", fontsize=8.0)
     fig.tight_layout()
 
     return fig
@@ -164,7 +164,7 @@ def plot_objective_space_2d(
     """
     Genera el grafico 2D del espacio de objetivos con la aproximacion discreta de soluciones.
     """
-    fig, ax = plt.subplots(figsize=(8, 6), dpi=150)
+    fig, ax = plt.subplots(figsize=(7.5, 5.5), dpi=150)
 
     nd_solutions = [s for s in unique_solutions if "no dominada" in s.get("pareto_status", "").lower()]
     d_solutions = [s for s in unique_solutions if "no dominada" not in s.get("pareto_status", "").lower()]
@@ -174,7 +174,7 @@ def plot_objective_space_2d(
         sorted_nd = sorted(nd_solutions, key=lambda s: s["Z1"])
         ax.plot([s["Z1"] for s in sorted_nd], [s["Z2"] for s in sorted_nd],
                 color="#1f77b4", linestyle="--", linewidth=1.5,
-                label="Aproximacion discreta (no dominadas)", zorder=2)
+                label="Aproximacion discreta obtenida (no dominadas)", zorder=2)
 
     # Dibujar puntos no dominados
     for s in nd_solutions:
@@ -207,9 +207,9 @@ def plot_objective_space_2d(
 
     ax.set_xlabel(f"Objetivo {z1_name} [{s1_str}]", fontsize=10, fontweight="bold")
     ax.set_ylabel(f"Objetivo {z2_name} [{s2_str}]", fontsize=10, fontweight="bold")
-    ax.set_title("Espacio de Objetivos — Evaluacion por Metodo de Ponderaciones", fontsize=12, fontweight="bold", pad=12)
+    ax.set_title("Espacio de objetivos: Aproximacion discreta de soluciones", fontsize=11, fontweight="bold", pad=10)
     ax.grid(True, linestyle=":", alpha=0.6)
-    ax.legend(loc="best", fontsize=8.5)
+    ax.legend(loc="best", fontsize=8.0)
     fig.tight_layout()
 
     return fig

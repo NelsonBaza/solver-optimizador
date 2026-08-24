@@ -55,6 +55,7 @@
 | [`pyproject.toml`](../pyproject.toml) | Configuración de empaquetado con dependencias validadas y configuración de `pytest`. |
 | [`.gitignore`](../.gitignore) | Exclusiones de Git (entornos virtuales, temporales de solvers, logs, cachés). |
 | [`README.md`](../README.md) | Documento principal con alcance, guía de inicio del MVP, licencias y limitaciones. |
+| [`docs/UI_UX_REFINEMENT.md`](UI_UX_REFINEMENT.md) | Informe técnico de refinamiento UI/UX y modernización de Streamlit. |
 | [`docs/UI_MVP_HARDENING.md`](UI_MVP_HARDENING.md) | Informe técnico de hardening del MVP de interfaz Streamlit y motor matemático. |
 | [`docs/UI_MVP_VALIDATION.md`](UI_MVP_VALIDATION.md) | Informe técnico de validación del MVP de interfaz Streamlit. |
 | [`docs/BENCHMARK_A.md`](BENCHMARK_A.md) | Informe técnico del Benchmark A multiobjetivo con AMPL. |
