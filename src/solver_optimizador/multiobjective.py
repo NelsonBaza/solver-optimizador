@@ -1,5 +1,5 @@
 """
-Modulo de optimizacion multiobjetivo (Biobjetivo mediante suma ponderada normalizada).
+Modulo de optimizacion multiobjetivo (Biobjetivo mediante suma ponderada normalizada con extremos lexicograficos).
 """
 
 import time
@@ -11,6 +11,7 @@ from pyomo.contrib.appsi.solvers import Highs
 from .lp_models import (
     BiobjectiveProblem,
     LPProblem,
+    LinearConstraint,
     MultiobjectiveSolution,
     SolverStatus,
     Sense,
@@ -32,95 +33,200 @@ def generate_weight_combinations(num_combinations: int) -> List[Tuple[float, flo
     return weights
 
 
+def solve_lexicographic_extreme(
+    problem: BiobjectiveProblem,
+    primary_index: int = 1,
+    tol: float = 1e-6,
+) -> Dict[str, Any]:
+    """
+    Resuelve el extremo eficiente lexicografico para un objetivo primario (1 para Z1, 2 para Z2),
+    desempatando con el objetivo secundario si existen multiples optimos.
+
+    1. Optimiza el objetivo primario Z_prim segun su sentido -> Z_prim*.
+    2. Fija Z_prim = Z_prim* mediante restriccion exacta (con fallback acotado por tolerancia).
+    3. Optimiza el objetivo secundario Z_sec segun su propio sentido.
+    4. Garantiza que el extremo resultante sea Pareto-eficiente (no dominado).
+    """
+    if primary_index == 1:
+        obj_prim = problem.objective1
+        obj_sec = problem.objective2
+        prim_name = "Z1"
+        sec_name = "Z2"
+    elif primary_index == 2:
+        obj_prim = problem.objective2
+        obj_sec = problem.objective1
+        prim_name = "Z2"
+        sec_name = "Z1"
+    else:
+        raise ValueError("primary_index debe ser 1 (Z1) o 2 (Z2).")
+
+    t_0 = time.perf_counter()
+
+    # Paso 1: Optimizacion individual del objetivo primario
+    p_prim = LPProblem(
+        variables=problem.variables,
+        objective=obj_prim,
+        constraints=problem.constraints,
+    )
+    res_prim = solve_lp(p_prim)
+
+    if res_prim.status != SolverStatus.OPTIMAL:
+        return {
+            "status": res_prim.status,
+            "primary_status": res_prim.status,
+            "primary_optimal_value": None,
+            "raw_secondary_value": None,
+            "x": None,
+            "Z1": None,
+            "Z2": None,
+            "has_alternative_optima": False,
+            "execution_time_sec": round(time.perf_counter() - t_0, 6),
+            "error_message": res_prim.status_message,
+        }
+
+    prim_val = res_prim.objective_value
+    sec_prim_val = obj_sec.evaluate(res_prim.variable_values)
+
+    # Paso 2: Fijar objetivo primario e intentar resolucion lexicografica exacta
+    lex_con_eq = LinearConstraint(
+        name=f"_lex_bound_{prim_name}",
+        coefficients=obj_prim.coefficients,
+        operator=Operator.EQ,
+        rhs=prim_val,
+    )
+    p_lex_eq = LPProblem(
+        variables=problem.variables,
+        objective=obj_sec,
+        constraints=problem.constraints + [lex_con_eq],
+    )
+    res_lex = solve_lp(p_lex_eq)
+
+    # Fallback con tolerancia si la igualdad exacta falla por condicionamiento numerico
+    if res_lex.status != SolverStatus.OPTIMAL and tol > 0:
+        op = Operator.LE if obj_prim.sense == Sense.MINIMIZE else Operator.GE
+        bound = prim_val + tol if obj_prim.sense == Sense.MINIMIZE else prim_val - tol
+        lex_con_ineq = LinearConstraint(
+            name=f"_lex_bound_{prim_name}",
+            coefficients=obj_prim.coefficients,
+            operator=op,
+            rhs=bound,
+        )
+        p_lex_ineq = LPProblem(
+            variables=problem.variables,
+            objective=obj_sec,
+            constraints=problem.constraints + [lex_con_ineq],
+        )
+        res_lex = solve_lp(p_lex_ineq)
+
+    if res_lex.status == SolverStatus.OPTIMAL:
+        x_final = res_lex.variable_values
+        final_status = res_lex.status
+    else:
+        x_final = res_prim.variable_values
+        final_status = res_prim.status
+
+    z1_final = round(problem.objective1.evaluate(x_final), 6)
+    z2_final = round(problem.objective2.evaluate(x_final), 6)
+    sec_final_val = obj_sec.evaluate(x_final)
+
+    # Detectar si el desempate mejoro el objetivo secundario
+    if obj_sec.sense == Sense.MAXIMIZE:
+        has_alt = (sec_final_val - sec_prim_val) > 1e-4
+    else:
+        has_alt = (sec_prim_val - sec_final_val) > 1e-4
+
+    t_total = time.perf_counter() - t_0
+
+    return {
+        "status": final_status,
+        "primary_status": res_prim.status,
+        "primary_optimal_value": round(prim_val, 6),
+        "raw_secondary_value": round(sec_prim_val, 6),
+        "x": x_final,
+        "Z1": z1_final,
+        "Z2": z2_final,
+        "has_alternative_optima": has_alt,
+        "execution_time_sec": round(t_total, 6),
+    }
+
+
 def solve_biobjective_weighted(
     problem: BiobjectiveProblem,
     weights: Optional[List[Tuple[float, float]]] = None,
     num_combinations: Optional[int] = 6,
-    tol: float = 1e-4,
+    tol: float = 1e-6,
 ) -> MultiobjectiveSolution:
     """
-    Ejecuta el flujo biobjetivo completo con el metodo de ponderaciones normalizadas.
+    Ejecuta el flujo biobjetivo completo con el metodo de ponderaciones normalizadas
+    y extremos lexicograficamente eficientes para la matriz de pagos.
     """
     problem.validate()
     notes = []
     t_start = time.perf_counter()
 
-    # 1. Optimizar Z1 individualmente
-    t_z1_0 = time.perf_counter()
-    p1 = LPProblem(
-        variables=problem.variables,
-        objective=problem.objective1,
-        constraints=problem.constraints,
-    )
-    res_z1 = solve_lp(p1)
-    t_z1_1 = time.perf_counter()
-
-    if res_z1.status != SolverStatus.OPTIMAL:
+    # 1. Extremo lexicografico para Z1
+    opt_z1 = solve_lexicographic_extreme(problem, primary_index=1, tol=tol)
+    if opt_z1["status"] != SolverStatus.OPTIMAL or opt_z1["x"] is None:
         return MultiobjectiveSolution(
-            individual_optima={"Z1_opt": res_z1, "Z2_opt": None},
+            individual_optima={"Z1_opt": opt_z1, "Z2_opt": None},
             payoff_matrix={},
             normalization_ranges={},
             weighted_runs=[],
             unique_solutions=[],
             pareto_classification={},
-            timing={"total_sec": t_z1_1 - t_z1_0},
-            notes=[f"No se pudo obtener optimo individual para Z1: {res_z1.status_message}"],
+            timing={"total_sec": opt_z1["execution_time_sec"]},
+            notes=[f"No se pudo obtener optimo individual lexicografico para Z1: {opt_z1.get('error_message', opt_z1['status'].value)}"],
         )
 
-    # 2. Optimizar Z2 individualmente
-    t_z2_0 = time.perf_counter()
-    p2 = LPProblem(
-        variables=problem.variables,
-        objective=problem.objective2,
-        constraints=problem.constraints,
-    )
-    res_z2 = solve_lp(p2)
-    t_z2_1 = time.perf_counter()
-
-    if res_z2.status != SolverStatus.OPTIMAL:
+    # 2. Extremo lexicografico para Z2
+    opt_z2 = solve_lexicographic_extreme(problem, primary_index=2, tol=tol)
+    if opt_z2["status"] != SolverStatus.OPTIMAL or opt_z2["x"] is None:
         return MultiobjectiveSolution(
-            individual_optima={"Z1_opt": res_z1, "Z2_opt": res_z2},
+            individual_optima={"Z1_opt": opt_z1, "Z2_opt": opt_z2},
             payoff_matrix={},
             normalization_ranges={},
             weighted_runs=[],
             unique_solutions=[],
             pareto_classification={},
-            timing={"total_sec": (t_z1_1 - t_z1_0) + (t_z2_1 - t_z2_0)},
-            notes=[f"No se pudo obtener optimo individual para Z2: {res_z2.status_message}"],
+            timing={"total_sec": opt_z1["execution_time_sec"] + opt_z2["execution_time_sec"]},
+            notes=[f"No se pudo obtener optimo individual lexicografico para Z2: {opt_z2.get('error_message', opt_z2['status'].value)}"],
         )
 
-    t_individual = (t_z1_1 - t_z1_0) + (t_z2_1 - t_z2_0)
+    t_individual = opt_z1["execution_time_sec"] + opt_z2["execution_time_sec"]
 
-    # 3. Matriz de pagos
-    x_at_z1 = res_z1.variable_values
-    x_at_z2 = res_z2.variable_values
+    if opt_z1["has_alternative_optima"]:
+        notes.append("El objetivo Z1 presento multiples optimos individuales; se aplico desempate lexicografico optimizando Z2.")
+    if opt_z2["has_alternative_optima"]:
+        notes.append("El objetivo Z2 presento multiples optimos individuales; se aplico desempate lexicografico optimizando Z1.")
 
-    z1_val_at_z1 = problem.objective1.evaluate(x_at_z1)
-    z2_val_at_z1 = problem.objective2.evaluate(x_at_z1)
-
-    z1_val_at_z2 = problem.objective1.evaluate(x_at_z2)
-    z2_val_at_z2 = problem.objective2.evaluate(x_at_z2)
-
+    # 3. Matriz de pagos eficiente
     payoff_matrix = {
         "opt_Z1": {
-            "x": x_at_z1,
-            "Z1": round(z1_val_at_z1, 6),
-            "Z2": round(z2_val_at_z1, 6),
+            "x": opt_z1["x"],
+            "Z1": opt_z1["Z1"],
+            "Z2": opt_z1["Z2"],
+            "has_tie_break": opt_z1["has_alternative_optima"],
+            "primary_optimal": opt_z1["primary_optimal_value"],
         },
         "opt_Z2": {
-            "x": x_at_z2,
-            "Z1": round(z1_val_at_z2, 6),
-            "Z2": round(z2_val_at_z2, 6),
+            "x": opt_z2["x"],
+            "Z1": opt_z2["Z1"],
+            "Z2": opt_z2["Z2"],
+            "has_tie_break": opt_z2["has_alternative_optima"],
+            "primary_optimal": opt_z2["primary_optimal_value"],
         },
     }
 
     # 4. Rangos de normalizacion
-    z1_max = max(z1_val_at_z1, z1_val_at_z2)
-    z1_min = min(z1_val_at_z1, z1_val_at_z2)
+    z1_vals = [opt_z1["Z1"], opt_z2["Z1"]]
+    z2_vals = [opt_z1["Z2"], opt_z2["Z2"]]
+
+    z1_max = max(z1_vals)
+    z1_min = min(z1_vals)
     z1_range = z1_max - z1_min
 
-    z2_max = max(z2_val_at_z1, z2_val_at_z2)
-    z2_min = min(z2_val_at_z1, z2_val_at_z2)
+    z2_max = max(z2_vals)
+    z2_min = min(z2_vals)
     z2_range = z2_max - z2_min
 
     normalization_ranges = {
@@ -132,27 +238,16 @@ def solve_biobjective_weighted(
         "Z2_range": round(z2_range, 6),
     }
 
-    # Deteccion estricta de rango nulo
     if z1_range < 1e-7 or z2_range < 1e-7:
         msg = (
             "No es posible aplicar la normalizacion por rangos porque al menos uno de los objetivos tiene rango nulo (Delta Z ~= 0). "
-            "Esto puede indicar que el objetivo es redundante, constante sobre los puntos evaluados o que no existe conflicto observable entre objetivos mediante esta matriz de pagos."
+            "Esto indica que el objetivo es constante o que ambos extremos lexicograficos coinciden."
         )
         notes.append(msg)
         return MultiobjectiveSolution(
             individual_optima={
-                "Z1_opt": {
-                    "x": x_at_z1,
-                    "Z1": round(z1_val_at_z1, 6),
-                    "Z2": round(z2_val_at_z1, 6),
-                    "status": res_z1.status.value,
-                },
-                "Z2_opt": {
-                    "x": x_at_z2,
-                    "Z1": round(z1_val_at_z2, 6),
-                    "Z2": round(z2_val_at_z2, 6),
-                    "status": res_z2.status.value,
-                },
+                "Z1_opt": opt_z1,
+                "Z2_opt": opt_z2,
             },
             payoff_matrix=payoff_matrix,
             normalization_ranges=normalization_ranges,
@@ -166,7 +261,7 @@ def solve_biobjective_weighted(
             notes=notes,
         )
 
-    # 5. Determinar lista de pesos
+    # 5. Lista de pesos
     if weights is None:
         weights_list = generate_weight_combinations(num_combinations or 6)
     else:
@@ -187,52 +282,67 @@ def solve_biobjective_weighted(
     t_sweep_0 = time.perf_counter()
 
     for idx, (a1, a2) in enumerate(weights_list):
-        mw = pyo.ConcreteModel(name=f"Weighted_{idx}")
-        var_dict = {}
-        for v in problem.variables:
-            var_obj = pyo.Var(name=v, within=pyo.NonNegativeReals)
-            setattr(mw, v, var_obj)
-            var_dict[v] = var_obj
-
-        for i, c in enumerate(problem.constraints):
-            expr = sum(c.coefficients.get(v, 0.0) * var_dict[v] for v in problem.variables)
-            if c.operator == Operator.LE:
-                con_obj = pyo.Constraint(expr=expr <= c.rhs)
-            elif c.operator == Operator.GE:
-                con_obj = pyo.Constraint(expr=expr >= c.rhs)
-            else:
-                con_obj = pyo.Constraint(expr=expr == c.rhs)
-            setattr(mw, f"con_{i}", con_obj)
-
-        # Expresiones de Z1 y Z2
-        z1_expr = sum(problem.objective1.coefficients.get(v, 0.0) * var_dict[v] for v in problem.variables)
-        z2_expr = sum(problem.objective2.coefficients.get(v, 0.0) * var_dict[v] for v in problem.variables)
-
-        # Normalizacion segun sentido:
-        # Para MAX Z: maximizar + Z / range
-        # Para MIN Z: maximizar - Z / range
-        term1 = (z1_expr / z1_range) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_expr / z1_range)
-        term2 = (z2_expr / z2_range) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_expr / z2_range)
-
-        mw.obj = pyo.Objective(expr=a1 * term1 + a2 * term2, sense=pyo.maximize)
-
-        res_w = solver.solve(mw)
-        term_str = str(res_w.termination_condition)
-
-        if "optimal" in term_str.lower():
-            if res_w.solution_loader:
-                res_w.solution_loader.load_vars()
-            x_vals = {v: round(float(pyo.value(var_dict[v])), 6) for v in problem.variables}
-            z1_val = round(problem.objective1.evaluate(x_vals), 6)
-            z2_val = round(problem.objective2.evaluate(x_vals), 6)
-            w_val = round(float(pyo.value(mw.obj.expr)), 6)
+        if abs(a1 - 1.0) < 1e-6 and abs(a2 - 0.0) < 1e-6:
+            # Extremo Z1 eficiente directamente
+            x_vals = opt_z1["x"]
+            z1_val = opt_z1["Z1"]
+            z2_val = opt_z1["Z2"]
+            term1 = (z1_val / z1_range) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_val / z1_range)
+            term2 = (z2_val / z2_range) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_val / z2_range)
+            w_val = round(a1 * term1 + a2 * term2, 6)
+            status_str = "Optimo"
+        elif abs(a1 - 0.0) < 1e-6 and abs(a2 - 1.0) < 1e-6:
+            # Extremo Z2 eficiente directamente
+            x_vals = opt_z2["x"]
+            z1_val = opt_z2["Z1"]
+            z2_val = opt_z2["Z2"]
+            term1 = (z1_val / z1_range) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_val / z1_range)
+            term2 = (z2_val / z2_range) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_val / z2_range)
+            w_val = round(a1 * term1 + a2 * term2, 6)
             status_str = "Optimo"
         else:
-            x_vals = None
-            z1_val = None
-            z2_val = None
-            w_val = None
-            status_str = term_str
+            mw = pyo.ConcreteModel(name=f"Weighted_{idx}")
+            var_dict = {}
+            for v in problem.variables:
+                var_obj = pyo.Var(name=v, within=pyo.NonNegativeReals)
+                setattr(mw, v, var_obj)
+                var_dict[v] = var_obj
+
+            for i, c in enumerate(problem.constraints):
+                expr = sum(c.coefficients.get(v, 0.0) * var_dict[v] for v in problem.variables)
+                if c.operator == Operator.LE:
+                    con_obj = pyo.Constraint(expr=expr <= c.rhs)
+                elif c.operator == Operator.GE:
+                    con_obj = pyo.Constraint(expr=expr >= c.rhs)
+                else:
+                    con_obj = pyo.Constraint(expr=expr == c.rhs)
+                setattr(mw, f"con_{i}", con_obj)
+
+            z1_expr = sum(problem.objective1.coefficients.get(v, 0.0) * var_dict[v] for v in problem.variables)
+            z2_expr = sum(problem.objective2.coefficients.get(v, 0.0) * var_dict[v] for v in problem.variables)
+
+            term1 = (z1_expr / z1_range) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_expr / z1_range)
+            term2 = (z2_expr / z2_range) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_expr / z2_range)
+
+            mw.obj = pyo.Objective(expr=a1 * term1 + a2 * term2, sense=pyo.maximize)
+
+            res_w = solver.solve(mw)
+            term_str = str(res_w.termination_condition)
+
+            if "optimal" in term_str.lower():
+                if res_w.solution_loader:
+                    res_w.solution_loader.load_vars()
+                x_vals = {v: round(float(pyo.value(var_dict[v])), 6) for v in problem.variables}
+                z1_val = round(problem.objective1.evaluate(x_vals), 6)
+                z2_val = round(problem.objective2.evaluate(x_vals), 6)
+                w_val = round(float(pyo.value(mw.obj.expr)), 6)
+                status_str = "Optimo"
+            else:
+                x_vals = None
+                z1_val = None
+                z2_val = None
+                w_val = None
+                status_str = term_str
 
         weighted_runs.append({
             "run_index": idx + 1,
@@ -248,16 +358,16 @@ def solve_biobjective_weighted(
     t_sweep_1 = time.perf_counter()
     t_sweep = t_sweep_1 - t_sweep_0
 
-    # 7. Agrupar soluciones unicas (solo de corridas optimas)
+    # 7. Agrupar soluciones unicas
     unique_solutions: List[Dict[str, Any]] = []
     for run in weighted_runs:
         if run["status"] != "Optimo" or run["x"] is None:
             continue
         matched = False
         for u in unique_solutions:
-            same_x = all(abs(run["x"].get(v, 0.0) - u["x"].get(v, 0.0)) < tol for v in problem.variables)
-            same_z1 = abs(run["Z1"] - u["Z1"]) < tol
-            same_z2 = abs(run["Z2"] - u["Z2"]) < tol
+            same_x = all(abs(run["x"].get(v, 0.0) - u["x"].get(v, 0.0)) < 1e-4 for v in problem.variables)
+            same_z1 = abs(run["Z1"] - u["Z1"]) < 1e-4
+            same_z2 = abs(run["Z2"] - u["Z2"]) < 1e-4
             if same_x and same_z1 and same_z2:
                 u["generated_by_weights"].append({"alpha1": run["alpha1"], "alpha2": run["alpha2"]})
                 u["count"] += 1
@@ -275,27 +385,26 @@ def solve_biobjective_weighted(
                 "pareto_status": "No evaluado",
             })
 
-    # 8. Clasificar dominancia de Pareto en el conjunto discreto
+    # 8. Clasificar dominancia de Pareto
     for i, sa in enumerate(unique_solutions):
         dominated = False
         for j, sb in enumerate(unique_solutions):
             if i == j:
                 continue
 
-            # Mejor o igual segun sentido
             if problem.objective1.sense == Sense.MAXIMIZE:
-                ge1 = sb["Z1"] >= sa["Z1"] - tol
-                gt1 = sb["Z1"] > sa["Z1"] + tol
+                ge1 = sb["Z1"] >= sa["Z1"] - 1e-4
+                gt1 = sb["Z1"] > sa["Z1"] + 1e-4
             else:
-                ge1 = sb["Z1"] <= sa["Z1"] + tol
-                gt1 = sb["Z1"] < sa["Z1"] - tol
+                ge1 = sb["Z1"] <= sa["Z1"] + 1e-4
+                gt1 = sb["Z1"] < sa["Z1"] - 1e-4
 
             if problem.objective2.sense == Sense.MAXIMIZE:
-                ge2 = sb["Z2"] >= sa["Z2"] - tol
-                gt2 = sb["Z2"] > sa["Z2"] + tol
+                ge2 = sb["Z2"] >= sa["Z2"] - 1e-4
+                gt2 = sb["Z2"] > sa["Z2"] + 1e-4
             else:
-                ge2 = sb["Z2"] <= sa["Z2"] + tol
-                gt2 = sb["Z2"] < sa["Z2"] - tol
+                ge2 = sb["Z2"] <= sa["Z2"] + 1e-4
+                gt2 = sb["Z2"] < sa["Z2"] - 1e-4
 
             if ge1 and ge2 and (gt1 or gt2):
                 dominated = True
@@ -319,18 +428,8 @@ def solve_biobjective_weighted(
 
     return MultiobjectiveSolution(
         individual_optima={
-            "Z1_opt": {
-                "x": x_at_z1,
-                "Z1": round(z1_val_at_z1, 6),
-                "Z2": round(z2_val_at_z1, 6),
-                "status": res_z1.status.value,
-            },
-            "Z2_opt": {
-                "x": x_at_z2,
-                "Z1": round(z1_val_at_z2, 6),
-                "Z2": round(z2_val_at_z2, 6),
-                "status": res_z2.status.value,
-            },
+            "Z1_opt": opt_z1,
+            "Z2_opt": opt_z2,
         },
         payoff_matrix=payoff_matrix,
         normalization_ranges=normalization_ranges,

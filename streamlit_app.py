@@ -987,19 +987,27 @@ with tab_res:
                     col_pm, col_rng = st.columns([1.2, 1.0])
                     with col_pm:
                         with st.container(border=True):
-                            st.subheader("Matriz de Pagos (Payoff Matrix)")
+                            st.subheader("Matriz de Pagos (Extremos Lexicograficos)")
+                            pm1 = sol.payoff_matrix.get("opt_Z1", {})
+                            pm2 = sol.payoff_matrix.get("opt_Z2", {})
+                            lbl1 = f"Extremo Z1 ({prob.objective1.sense.value.upper()})"
+                            if pm1.get("has_tie_break"):
+                                lbl1 += " [Desempate aplicado]"
+                            lbl2 = f"Extremo Z2 ({prob.objective2.sense.value.upper()})"
+                            if pm2.get("has_tie_break"):
+                                lbl2 += " [Desempate aplicado]"
                             pm_data = [
                                 {
-                                    "Solucion Individual": f"Optimo individual Z1 ({prob.objective1.sense.value.upper()})",
-                                    "Z1": sol.payoff_matrix["opt_Z1"]["Z1"],
-                                    "Z2": sol.payoff_matrix["opt_Z1"]["Z2"],
-                                    "Variables": str(sol.payoff_matrix["opt_Z1"]["x"]),
+                                    "Extremo": lbl1,
+                                    "Z1": pm1.get("Z1"),
+                                    "Z2": pm1.get("Z2"),
+                                    "Variables": str(pm1.get("x", {})),
                                 },
                                 {
-                                    "Solucion Individual": f"Optimo individual Z2 ({prob.objective2.sense.value.upper()})",
-                                    "Z1": sol.payoff_matrix["opt_Z2"]["Z1"],
-                                    "Z2": sol.payoff_matrix["opt_Z2"]["Z2"],
-                                    "Variables": str(sol.payoff_matrix["opt_Z2"]["x"]),
+                                    "Extremo": lbl2,
+                                    "Z1": pm2.get("Z1"),
+                                    "Z2": pm2.get("Z2"),
+                                    "Variables": str(pm2.get("x", {})),
                                 },
                             ]
                             st.dataframe(
@@ -1140,5 +1148,20 @@ with tab_res:
                 # Subtab 5: Diagnostico
                 with subtab_diag:
                     with st.container(border=True):
-                        st.subheader("Tiempos de Resolucion (Pyomo + HiGHS)")
+                        st.subheader("🔍 Detalle de Extremos y Desempate Lexicografico")
+                        for k, name, s_obj in [("Z1_opt", "Z1", prob.objective1), ("Z2_opt", "Z2", prob.objective2)]:
+                            opt_data = sol.individual_optima.get(k, {})
+                            if isinstance(opt_data, dict):
+                                has_tb = opt_data.get("has_alternative_optima", False)
+                                prim_val = opt_data.get("primary_optimal_value")
+                                z1_val = opt_data.get("Z1")
+                                z2_val = opt_data.get("Z2")
+                                st.markdown(f"**Extremo para {name} ({s_obj.sense.value.upper()}):**")
+                                st.markdown(
+                                    f"- Óptimo principal aislado: `{prim_val:.4f}`\n"
+                                    f"- Desempate lexicográfico aplicado: `{'✅ Sí (múltiples óptimos detectados)' if has_tb else 'ℹ️ No requerido (óptimo único)'}`\n"
+                                    f"- Punto eficiente resultante: $Z_1 = {z1_val:.4f}, \\quad Z_2 = {z2_val:.4f}$"
+                                )
+                    with st.container(border=True):
+                        st.subheader("⏱️ Tiempos de Resolucion (Pyomo + HiGHS)")
                         st.json(sol.timing)

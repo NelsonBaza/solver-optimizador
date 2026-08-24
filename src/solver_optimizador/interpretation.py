@@ -121,6 +121,20 @@ def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: Multio
                 "Ambos objetivos alcanzan simultaneamente su optimo individual en la misma solucion, por lo que no se observa conflicto directo entre ellos en los optimos individuales."
             )
 
+        # Nota de construccion lexicografica
+        bullets.append("La matriz de pagos se construyó utilizando extremos lexicográficamente eficientes.")
+
+        if pm.get("opt_Z1", {}).get("has_tie_break"):
+            bullets.append(
+                f"El objetivo $Z_1$ presentó múltiples soluciones con el mismo óptimo individual ($Z_1^* = {z1_opt:.2f}$). "
+                f"Se utilizó $Z_2$ ({s2.value.upper()}) como criterio secundario de desempate para seleccionar el extremo eficiente."
+            )
+        if pm.get("opt_Z2", {}).get("has_tie_break"):
+            bullets.append(
+                f"El objetivo $Z_2$ presentó múltiples soluciones con el mismo óptimo individual ($Z_2^* = {z2_opt:.2f}$). "
+                f"Se utilizó $Z_1$ ({s1.value.upper()}) como criterio secundario de desempate para seleccionar el extremo eficiente."
+            )
+
     # 2. Soluciones unicas y no dominancia
     n_runs = len(solution.weighted_runs)
     n_unique = len(solution.unique_solutions)
@@ -131,6 +145,13 @@ def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: Multio
         f"Se evaluaron **{n_runs} combinaciones de ponderaciones**, identificando **{n_unique} soluciones unicas**, "
         f"de las cuales **{n_nd} resultaron no dominadas** en el conjunto discreto evaluado."
     )
+
+    # Nota especial para evaluacion con pesos iguales (0.50, 0.50)
+    if n_runs == 1 and abs(solution.weighted_runs[0]["alpha1"] - 0.5) < 1e-4:
+        bullets.append(
+            "Con pesos iguales ($\\\\alpha = (0.50, 0.50)$) en modelos con intercambio lineal entre objetivos, "
+            "existe degeneración de la función ponderada y múltiples soluciones óptimas alternativas a lo largo del segmento eficiente."
+        )
 
     # 3. Estabilidad frente a ponderaciones evaluadas
     multi_weight_sols = [u for u in solution.unique_solutions if u["count"] > 1]

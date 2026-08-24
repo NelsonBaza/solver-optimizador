@@ -239,8 +239,8 @@
     }
   },
   "timing": {
-    "individual_optima_sec": 0.0085,
-    "weighted_sweep_sec": 0.0236,
-    "total_sec": 0.0323
+    "individual_optima_sec": 0.0103,
+    "weighted_sweep_sec": 0.027,
+    "total_sec": 0.0375
   }
 }
