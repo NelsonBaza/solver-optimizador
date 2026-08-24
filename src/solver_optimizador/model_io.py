@@ -71,6 +71,9 @@ def validate_model_dict(data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     if not isinstance(variables, list) or len(variables) == 0:
         return False, "El problema debe definir una lista no vacia de variables."
 
+    if len(set(variables)) != len(variables):
+        return False, "Los nombres de las variables deben ser unicos."
+
     for v in variables:
         if not isinstance(v, str) or not v.strip():
             return False, f"Nombre de variable invalido: {v}"

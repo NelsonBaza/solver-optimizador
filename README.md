@@ -91,6 +91,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/STATUS.md`](docs/STATUS.md): Fotografía técnica del estado actual del proyecto.
 * [`docs/DECISIONS.md`](docs/DECISIONS.md): Registro histórico de decisiones arquitectónicas (ADR-001 a ADR-007).
 * [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](docs/BENCHMARK_A_BACKEND_COMPARISON.md): Comparativa exhaustiva Pyomo vs. AMPL.
+* [`docs/CUSTOM_VARIABLES_AND_MODEL_LOADING.md`](docs/CUSTOM_VARIABLES_AND_MODEL_LOADING.md): Nombres personalizados de variables y carga atómica de modelos JSON.
 * [`docs/MODEL_PERSISTENCE_AND_GENERAL_PLOTS.md`](docs/MODEL_PERSISTENCE_AND_GENERAL_PLOTS.md): Persistencia de modelos JSON y gráficos para $N$ variables.
 * [`docs/RESULT_INTERPRETATION_AND_PLOT_REFINEMENT.md`](docs/RESULT_INTERPRETATION_AND_PLOT_REFINEMENT.md): Informe técnico de mejora de gráficos e interpretación base automática.
 * [`docs/UI_UX_REFINEMENT.md`](docs/UI_UX_REFINEMENT.md): Informe de refinamiento UI/UX y modernización en Streamlit.

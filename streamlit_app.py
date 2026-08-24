@@ -1,6 +1,7 @@
 """
 Aplicacion Web Streamlit — Suite de Optimizacion Matematica (MVP LP).
 Formulacion, resolucion, persistencia y analisis de Programacion Lineal Continua (Monoobjetivo y Biobjetivo).
+Soporta hasta 100 variables, nombres personalizados, persistencia JSON y carga atomica.
 Backend matematico: Pyomo + HiGHS (APPSI).
 """
 
@@ -62,6 +63,8 @@ st.set_page_config(
 def _init_session_state():
     if "editor_version" not in st.session_state:
         st.session_state.editor_version = 0
+    if "uploader_version" not in st.session_state:
+        st.session_state.uploader_version = 0
     if "model_name" not in st.session_state:
         st.session_state.model_name = "Modelo de Optimizacion"
     if "model_desc" not in st.session_state:
@@ -109,7 +112,8 @@ def _init_session_state():
 
 def _clear_widget_keys():
     """Limpia las claves de widgets para evitar desincronizacion con session_state."""
-    keys_to_clear = [
+    prefixes = ("mono_c_", "bio_c1_", "bio_c2_", "var_name_")
+    exact_keys = [
         "radio_prob_type",
         "num_vars_input",
         "mono_sense_select",
@@ -122,7 +126,7 @@ def _clear_widget_keys():
         "model_desc_input",
     ]
     for k in list(st.session_state.keys()):
-        if k.startswith("mono_c_") or k.startswith("bio_c1_") or k.startswith("bio_c2_") or k in keys_to_clear:
+        if any(k.startswith(p) for p in prefixes) or k in exact_keys:
             del st.session_state[k]
 
 
@@ -136,26 +140,39 @@ def _new_model():
     st.session_state.var_names = ["x1", "x2"]
     st.session_state.obj_sense = "Maximizar"
     st.session_state.obj_coeffs = {"x1": 1.0, "x2": 1.0}
+    st.session_state.obj1_sense = "Maximizar"
+    st.session_state.obj1_coeffs = {"x1": 1.0, "x2": 1.0}
+    st.session_state.obj2_sense = "Maximizar"
+    st.session_state.obj2_coeffs = {"x1": 1.0, "x2": 1.0}
     st.session_state.constraints_data = [
         {"name": "Restriccion 1", "x1": 1.0, "x2": 1.0, "operator": "<=", "rhs": 10.0}
     ]
     st.session_state.last_solution = None
+    st.session_state.last_solution_type = None
+    st.session_state.last_solution_problem = None
     st.session_state.last_solution_signature = None
     st.session_state.example_msg = "Nuevo modelo en blanco iniciado."
 
 
 def _load_model_dict(data: Dict[str, Any]):
+    """Carga atómica completa del modelo desde la estructura deserializada."""
     _clear_widget_keys()
     st.session_state.editor_version += 1
-    st.session_state.model_name = data.get("metadata", {}).get("name", "Modelo Importado")
+    meta_name = data.get("metadata", {}).get("name", "Modelo Importado")
+    st.session_state.model_name = meta_name
     st.session_state.model_desc = data.get("metadata", {}).get("description", "")
     st.session_state.problem_type = data["problem_type"]
     st.session_state.num_vars = data["num_vars"]
-    st.session_state.var_names = data["var_names"]
+    st.session_state.var_names = list(data["var_names"])
     st.session_state.constraints_data = data["constraints_data"]
+
     if data["problem_type"] == "Monoobjetivo":
         st.session_state.obj_sense = data["obj_sense"]
         st.session_state.obj_coeffs = data["obj_coeffs"]
+        st.session_state.obj1_sense = "Maximizar"
+        st.session_state.obj1_coeffs = {v: 0.0 for v in data["var_names"]}
+        st.session_state.obj2_sense = "Maximizar"
+        st.session_state.obj2_coeffs = {v: 0.0 for v in data["var_names"]}
     else:
         st.session_state.obj1_sense = data["obj1_sense"]
         st.session_state.obj1_coeffs = data["obj1_coeffs"]
@@ -164,10 +181,19 @@ def _load_model_dict(data: Dict[str, Any]):
         st.session_state.mo_mode = data.get("mo_mode", "Barrido automatico")
         st.session_state.num_weights = data.get("num_weights", 6)
         st.session_state.custom_a1 = data.get("custom_a1", 0.5)
+        st.session_state.obj_sense = "Maximizar"
+        st.session_state.obj_coeffs = {v: 0.0 for v in data["var_names"]}
 
     st.session_state.last_solution = None
+    st.session_state.last_solution_type = None
+    st.session_state.last_solution_problem = None
     st.session_state.last_solution_signature = None
-    st.session_state.example_msg = f"Modelo '{st.session_state.model_name}' cargado exitosamente."
+
+    n_v = data["num_vars"]
+    n_c = len(data["constraints_data"])
+    p_t = data["problem_type"]
+    s_info = data["obj_sense"] if p_t == "Monoobjetivo" else f"Z1:{data['obj1_sense']} / Z2:{data['obj2_sense']}"
+    st.session_state.example_msg = f"✅ Modelo '{meta_name}' cargado correctamente ({n_v} variables · {n_c} restricciones · {p_t} · {s_info})."
 
 
 def _load_example_mono():
@@ -186,6 +212,8 @@ def _load_example_mono():
         {"name": "Limite x2", "x1": 0.0, "x2": 1.0, "operator": "<=", "rhs": 3.0},
     ]
     st.session_state.last_solution = None
+    st.session_state.last_solution_type = None
+    st.session_state.last_solution_problem = None
     st.session_state.last_solution_signature = None
     st.session_state.example_msg = "Ejemplo 1 (Monoobjetivo) cargado exitosamente."
 
@@ -209,6 +237,8 @@ def _load_example_bio():
     st.session_state.mo_mode = "Barrido automatico"
     st.session_state.num_weights = 6
     st.session_state.last_solution = None
+    st.session_state.last_solution_type = None
+    st.session_state.last_solution_problem = None
     st.session_state.last_solution_signature = None
     st.session_state.example_msg = "Benchmark A (Biobjetivo) cargado exitosamente."
 
@@ -246,16 +276,29 @@ with st.sidebar:
             key="model_desc_input",
         )
 
-        # Cargar archivo JSON
-        uploaded_file = st.file_uploader("Cargar modelo (.json):", type=["json"], key="uploader_json")
+        # Cargar archivo JSON con confirmacion explicita
+        uploader_key = f"uploader_json_{st.session_state.uploader_version}"
+        uploaded_file = st.file_uploader("Seleccionar modelo (.json):", type=["json"], key=uploader_key)
         if uploaded_file is not None:
             try:
-                content = uploaded_file.read().decode("utf-8")
+                content = uploaded_file.getvalue().decode("utf-8")
                 parsed_data = deserialize_model(content)
-                _load_model_dict(parsed_data)
-                st.rerun()
+
+                # Resumen del archivo seleccionado antes de aplicar
+                st.info("📄 **Archivo seleccionado:**")
+                f_name = parsed_data.get("metadata", {}).get("name", "Sin nombre")
+                f_type = parsed_data.get("problem_type")
+                f_vars = parsed_data.get("num_vars")
+                f_cons = len(parsed_data.get("constraints_data", []))
+                f_obj = parsed_data.get("obj_sense") if f_type == "Monoobjetivo" else f"Z1:{parsed_data.get('obj1_sense')}, Z2:{parsed_data.get('obj2_sense')}"
+                st.markdown(f"- **Nombre:** {f_name}\n- **Tipo:** {f_type}\n- **Variables:** {f_vars}\n- **Restricciones:** {f_cons}\n- **Objetivo(s):** {f_obj}")
+
+                if st.button("📥 Cargar modelo", type="primary", width="stretch"):
+                    _load_model_dict(parsed_data)
+                    st.session_state.uploader_version += 1
+                    st.rerun()
             except Exception as e:
-                st.error(f"No se pudo cargar el modelo: {e}")
+                st.error(f"No se pudo leer el archivo JSON: {e}")
 
     # 2. Ejemplos Precargados
     with st.container(border=True):
@@ -283,20 +326,86 @@ with st.sidebar:
         st.session_state.problem_type = prob_type
 
         st.subheader("2. Variables de Decision")
-        st.caption("Variables continuas no negativas ($x_i \\ge 0$).")
+        st.caption("Variables continuas no negativas ($x_i \\ge 0$). Soporta hasta 100 variables.")
         num_vars = st.number_input(
-            "Cantidad de variables:",
+            "Cantidad de variables (1..100):",
             min_value=1,
-            max_value=20,
+            max_value=100,
             value=int(st.session_state.num_vars),
             step=1,
             key="num_vars_input",
         )
-        st.session_state.num_vars = int(num_vars)
+        
+        # Sincronizar longitud de nombres al cambiar num_vars
+        old_var_names = list(st.session_state.var_names)
+        if int(num_vars) != len(old_var_names):
+            st.session_state.num_vars = int(num_vars)
+            if int(num_vars) > len(old_var_names):
+                for i in range(len(old_var_names), int(num_vars)):
+                    new_default_name = f"x{i+1}"
+                    suffix = 1
+                    while new_default_name in old_var_names:
+                        new_default_name = f"x{i+1}_{suffix}"
+                        suffix += 1
+                    old_var_names.append(new_default_name)
+            else:
+                old_var_names = old_var_names[:int(num_vars)]
+            st.session_state.var_names = old_var_names
 
-        var_names = [f"x{i+1}" for i in range(num_vars)]
-        st.session_state.var_names = var_names
-        st.info(f"Variables activas: `{'`, `'.join(var_names)}`")
+        # Editor de nombres de variables
+        st.markdown("**Nombres de variables:**")
+        df_vars_data = [{"#": i+1, "Nombre": name} for i, name in enumerate(st.session_state.var_names)]
+        edited_vars_df = st.data_editor(
+            pd.DataFrame(df_vars_data),
+            disabled=["#"],
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "#": st.column_config.NumberColumn("#", width="small"),
+                "Nombre": st.column_config.TextColumn("Nombre Variable", width="medium", required=True),
+            },
+            key=f"var_names_editor_{st.session_state.editor_version}",
+        )
+
+        # Extraer y validar nombres editados
+        candidate_names = [str(r["Nombre"]).strip() for _, r in edited_vars_df.iterrows()]
+        has_var_name_error = False
+        if any(not name for name in candidate_names):
+            st.error("Los nombres de las variables no pueden estar vacios.")
+            has_var_name_error = True
+        elif len(set(candidate_names)) != len(candidate_names):
+            st.error("Los nombres de las variables deben ser unicos.")
+            has_var_name_error = True
+        elif candidate_names != st.session_state.var_names:
+            # Migrar coeficientes por posicion
+            old_names = list(st.session_state.var_names)
+            new_names = list(candidate_names)
+            
+            # Monoobjetivo
+            new_mono = {new_names[i]: float(st.session_state.obj_coeffs.get(old_names[i], 0.0)) for i in range(len(new_names))}
+            st.session_state.obj_coeffs = new_mono
+            
+            # Biobjetivo
+            new_bio1 = {new_names[i]: float(st.session_state.obj1_coeffs.get(old_names[i], 0.0)) for i in range(len(new_names))}
+            new_bio2 = {new_names[i]: float(st.session_state.obj2_coeffs.get(old_names[i], 0.0)) for i in range(len(new_names))}
+            st.session_state.obj1_coeffs = new_bio1
+            st.session_state.obj2_coeffs = new_bio2
+
+            # Restricciones
+            new_cons_data = []
+            for row in st.session_state.constraints_data:
+                new_row = {"name": row.get("name", "Restriccion"), "operator": row.get("operator", "<="), "rhs": row.get("rhs", 0.0)}
+                for i in range(len(new_names)):
+                    old_k = old_names[i] if i < len(old_names) else f"x{i+1}"
+                    new_k = new_names[i]
+                    new_row[new_k] = float(row.get(old_k, 0.0))
+                new_cons_data.append(new_row)
+            st.session_state.constraints_data = new_cons_data
+            st.session_state.var_names = new_names
+            st.session_state.editor_version += 1
+            st.rerun()
+
+        var_names = list(st.session_state.var_names)
 
     # 4. Metodologia / Ayuda
     with st.expander("ℹ️ Metodologia Multiobjetivo"):
@@ -356,30 +465,30 @@ with tab_form:
                     )
                     st.session_state.obj_sense = sense_str
 
-                st.markdown("**Coeficientes lineales:**")
+                st.markdown("**Coeficientes lineales del objetivo:**")
                 st.caption("💡 **Nota:** Use punto (.) como separador decimal (ejemplo: 2.4525).")
 
-                # Disponer en cuadricula si hay mas de 4 variables
-                n_cols_grid = min(4, len(var_names))
-                obj_coeffs = {}
-                for row_start in range(0, len(var_names), n_cols_grid):
-                    cols_grid = st.columns(n_cols_grid)
-                    for idx, v in enumerate(var_names[row_start:row_start + n_cols_grid]):
-                        with cols_grid[idx]:
-                            default_val = float(st.session_state.obj_coeffs.get(v, 1.0 if v in ("x1", "x2") else 0.0))
-                            val = st.number_input(
-                                f"Coef. ${v}$:",
-                                value=default_val,
-                                step=1.0,
-                                format="%.4f",
-                                key=f"mono_c_{v}",
-                            )
-                            obj_coeffs[v] = val
+                # Editor tabular escalable para coeficientes
+                obj_df_data = [
+                    {"Variable": v, "Coeficiente": float(st.session_state.obj_coeffs.get(v, 1.0 if idx < 2 else 0.0))}
+                    for idx, v in enumerate(var_names)
+                ]
+                edited_obj_df = st.data_editor(
+                    pd.DataFrame(obj_df_data),
+                    disabled=["Variable"],
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Variable": st.column_config.TextColumn("Variable", width="medium"),
+                        "Coeficiente": st.column_config.NumberColumn("Coeficiente", format="%.4f", required=True),
+                    },
+                    key=f"mono_obj_editor_{st.session_state.editor_version}",
+                )
+                obj_coeffs = {str(r["Variable"]): float(r["Coeficiente"]) for _, r in edited_obj_df.iterrows()}
                 st.session_state.obj_coeffs = obj_coeffs
 
             else:  # Biobjetivo
-                st.markdown("#### Objetivo 1 ($Z_1$)")
-                col_s1, _ = st.columns([1, 2])
+                col_s1, col_s2 = st.columns(2)
                 with col_s1:
                     sense1_idx = 0 if st.session_state.obj1_sense == "Maximizar" else 1
                     sense1_str = st.selectbox(
@@ -389,26 +498,6 @@ with tab_form:
                         key="bio_sense1_select",
                     )
                     st.session_state.obj1_sense = sense1_str
-
-                n_cols_grid = min(4, len(var_names))
-                obj1_coeffs = {}
-                for row_start in range(0, len(var_names), n_cols_grid):
-                    cols_grid = st.columns(n_cols_grid)
-                    for idx, v in enumerate(var_names[row_start:row_start + n_cols_grid]):
-                        with cols_grid[idx]:
-                            default_val = float(st.session_state.obj1_coeffs.get(v, 1.0 if v in ("x1", "x2") else 0.0))
-                            val = st.number_input(
-                                f"Coef. ${v}$ ($Z_1$):",
-                                value=default_val,
-                                step=1.0,
-                                format="%.4f",
-                                key=f"bio_c1_{v}",
-                            )
-                            obj1_coeffs[v] = val
-                st.session_state.obj1_coeffs = obj1_coeffs
-
-                st.markdown("#### Objetivo 2 ($Z_2$)")
-                col_s2, _ = st.columns([1, 2])
                 with col_s2:
                     sense2_idx = 0 if st.session_state.obj2_sense == "Maximizar" else 1
                     sense2_str = st.selectbox(
@@ -419,20 +508,32 @@ with tab_form:
                     )
                     st.session_state.obj2_sense = sense2_str
 
-                obj2_coeffs = {}
-                for row_start in range(0, len(var_names), n_cols_grid):
-                    cols_grid = st.columns(n_cols_grid)
-                    for idx, v in enumerate(var_names[row_start:row_start + n_cols_grid]):
-                        with cols_grid[idx]:
-                            default_val = float(st.session_state.obj2_coeffs.get(v, 1.0 if v in ("x1", "x2") else 0.0))
-                            val = st.number_input(
-                                f"Coef. ${v}$ ($Z_2$):",
-                                value=default_val,
-                                step=1.0,
-                                format="%.4f",
-                                key=f"bio_c2_{v}",
-                            )
-                            obj2_coeffs[v] = val
+                st.markdown("**Coeficientes de ambos objetivos:**")
+                st.caption("💡 **Nota:** Use punto (.) como separador decimal (ejemplo: 2.4525).")
+
+                bio_df_data = [
+                    {
+                        "Variable": v,
+                        "Coeficiente Z1": float(st.session_state.obj1_coeffs.get(v, 10.0 if idx == 0 else (3.0 if idx == 1 else 0.0))),
+                        "Coeficiente Z2": float(st.session_state.obj2_coeffs.get(v, 0.8 if idx == 0 else (1.3 if idx == 1 else 0.0))),
+                    }
+                    for idx, v in enumerate(var_names)
+                ]
+                edited_bio_df = st.data_editor(
+                    pd.DataFrame(bio_df_data),
+                    disabled=["Variable"],
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Variable": st.column_config.TextColumn("Variable", width="medium"),
+                        "Coeficiente Z1": st.column_config.NumberColumn(f"Coef. Z1 ({st.session_state.obj1_sense[:3].upper()})", format="%.4f", required=True),
+                        "Coeficiente Z2": st.column_config.NumberColumn(f"Coef. Z2 ({st.session_state.obj2_sense[:3].upper()})", format="%.4f", required=True),
+                    },
+                    key=f"bio_obj_editor_{st.session_state.editor_version}",
+                )
+                obj1_coeffs = {str(r["Variable"]): float(r["Coeficiente Z1"]) for _, r in edited_bio_df.iterrows()}
+                obj2_coeffs = {str(r["Variable"]): float(r["Coeficiente Z2"]) for _, r in edited_bio_df.iterrows()}
+                st.session_state.obj1_coeffs = obj1_coeffs
                 st.session_state.obj2_coeffs = obj2_coeffs
 
         # Ponderaciones (solo en Biobjetivo)
@@ -491,7 +592,7 @@ with tab_form:
                     "RHS": float(c_dict.get("rhs", 10.0)),
                 }
                 for v in var_names:
-                    row[v] = float(c_dict.get(v, 1.0 if v in ("x1", "x2") else 0.0))
+                    row[v] = float(c_dict.get(v, 0.0))
                 current_data.append(row)
 
             df_constraints = pd.DataFrame(current_data)
@@ -502,7 +603,7 @@ with tab_form:
                 "RHS": st.column_config.NumberColumn("Lado Derecho (RHS)", required=True, format="%.4f"),
             }
             for v in var_names:
-                col_config[v] = st.column_config.NumberColumn(f"Coef. {v}", required=True, format="%.4f")
+                col_config[v] = st.column_config.NumberColumn(f"{v}", required=True, format="%.4f")
 
             edited_df = st.data_editor(
                 df_constraints[column_order],
@@ -552,7 +653,12 @@ with tab_form:
     st.markdown("---")
     col_act1, col_act2 = st.columns([2, 1])
     with col_act1:
-        btn_solve = st.button("🚀 Resolver Modelo con Pyomo + HiGHS", type="primary", width="stretch")
+        btn_solve = st.button(
+            "🚀 Resolver Modelo con Pyomo + HiGHS",
+            type="primary",
+            width="stretch",
+            disabled=has_var_name_error,
+        )
     with col_act2:
         # Serializar modelo actual para descarga
         curr_export_dict = {
@@ -737,9 +843,9 @@ with tab_res:
                         st.metric(label="Valor Optimo Z*", value=f"{sol.objective_value:.4f}")
                     for i, v in enumerate(prob.variables[:n_display_vars]):
                         with m_cols[i + 1]:
-                            st.metric(label=f"Variable {v}*", value=f"{sol.variable_values[v]:.4f}")
+                            st.metric(label=f"{v}*", value=f"{sol.variable_values[v]:.4f}")
                     if len(prob.variables) > 8:
-                        st.caption(f"*(Mostrando las primeras 8 variables. Todas las {len(prob.variables)} variables se encuentran disponibles en el grafico y la tabla inferior)*")
+                        st.caption(f"*(Mostrando las primeras 8 variables. Todas las {len(prob.variables)} variables se encuentran detalladas en el grafico y la tabla inferior)*")
 
                 # Sub-pestañas de analisis monoobjetivo
                 tab_mono_tbl, tab_mono_plots = st.tabs(["📋 Restricciones y Holguras", "📊 Graficos de Resultados"])

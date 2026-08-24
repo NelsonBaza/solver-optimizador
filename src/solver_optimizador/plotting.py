@@ -260,13 +260,14 @@ def plot_variable_values(
 ) -> plt.Figure:
     """
     Genera un grafico de barras con los valores optimos de las variables de decision.
-    Funciona para cualquier cantidad de variables (2, 8, 10 o mas).
+    Soporta nombres personalizados y escalas dinamicas para cualquier cantidad de variables (1..100).
     """
     vars_list = list(variable_values.keys())
     vals_list = [float(variable_values[v]) for v in vars_list]
 
     n = len(vars_list)
-    fig_w = max(7.0, min(14.0, n * 0.9))
+    # Ancho adaptativo segun cantidad de variables
+    fig_w = max(7.5, min(20.0, n * 0.45 + 2.5))
     fig, ax = plt.subplots(figsize=(fig_w, 4.8), dpi=150)
 
     bars = ax.bar(vars_list, vals_list, color="#1f77b4", edgecolor="#0d47a1", width=0.55, zorder=3)
@@ -275,28 +276,41 @@ def plot_variable_values(
     min_val = min(vals_list) if vals_list else 0.0
 
     # Margen superior para que el texto encima de las barras no se corte
-    top_limit = max(max_val * 1.20, 1.0)
+    top_limit = max(max_val * 1.22, 1.0)
     ax.set_ylim(min(0.0, min_val * 1.1), top_limit)
+
+    # Rotacion y tamaño de fuente adaptativo
+    if n <= 8:
+        rot = 0
+        font_sz = 8.5
+    elif n <= 16:
+        rot = 35
+        font_sz = 7.5
+    else:
+        rot = 55
+        font_sz = 6.8
 
     for bar, val in zip(bars, vals_list):
         y_pos = bar.get_height()
         if abs(val) < 1e-4:
             txt = "0"
-            y_offset = top_limit * 0.02
         else:
             txt = f"{val:.4g}"
-            y_offset = top_limit * 0.02
+        y_offset = top_limit * 0.02
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
             y_pos + y_offset,
             txt,
             ha="center",
             va="bottom",
-            fontsize=8.5,
+            fontsize=font_sz,
             fontweight="bold",
             color="#333333",
+            rotation=0 if n <= 14 else 90,
         )
 
+    ax.set_xticks(range(n))
+    ax.set_xticklabels(vars_list, rotation=rot, ha="right" if rot > 0 else "center", fontsize=font_sz + 0.5)
     ax.set_xlabel("Variables de Decision", fontsize=10, fontweight="bold")
     ax.set_ylabel("Valor Optimo", fontsize=10, fontweight="bold")
     ax.set_title(title, fontsize=11, fontweight="bold", pad=14)
@@ -313,6 +327,7 @@ def plot_constraint_slacks(
     """
     Genera un grafico de barras horizontal con las holguras de cada restriccion.
     Distingue visualmente las restricciones activas (holgura = 0) de las no activas.
+    Soporta dinamicamente desde 1 hasta 50+ restricciones.
     """
     names = []
     slacks = []
@@ -331,19 +346,22 @@ def plot_constraint_slacks(
         is_actives.append(act)
 
     n = len(names)
-    fig_h = max(4.5, min(12.0, n * 0.45 + 1.5))
-    fig, ax = plt.subplots(figsize=(7.5, fig_h), dpi=150)
+    fig_h = max(4.5, min(22.0, n * 0.38 + 1.8))
+    fig, ax = plt.subplots(figsize=(8.0, fig_h), dpi=150)
 
     y_pos = np.arange(len(names))
     colors = ["#d62728" if act else "#2ca02c" for act in is_actives]
 
-    bars = ax.barh(y_pos, slacks, color=colors, edgecolor="#333333", height=0.55, zorder=3)
+    bars = ax.barh(y_pos, slacks, color=colors, edgecolor="#333333", height=0.60, zorder=3)
+    
+    # Tamaño de fuente adaptativo para nombres de restricciones
+    font_sz = max(6.5, min(8.5, 160.0 / max(n, 1)))
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(names, fontsize=8.5)
+    ax.set_yticklabels(names, fontsize=font_sz)
     ax.invert_yaxis()  # Primera restriccion arriba
 
     max_slack = max(slacks) if slacks else 1.0
-    ax.set_xlim(0, max(max_slack * 1.25, 1.0))
+    ax.set_xlim(0, max(max_slack * 1.30, 1.0))
 
     for bar, slack, act in zip(bars, slacks, is_actives):
         w = bar.get_width()
@@ -359,7 +377,7 @@ def plot_constraint_slacks(
             lbl,
             va="center",
             ha="left",
-            fontsize=8.0,
+            fontsize=font_sz,
             fontweight="bold",
             color=col,
         )
