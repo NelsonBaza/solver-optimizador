@@ -1,103 +1,95 @@
-# Suite de Optimización Matemática — Prueba de Concepto AMPL + HiGHS
+# Suite de Optimización Matemática — MVP de Optimización Lineal
 
-Este repositorio contiene una prueba de concepto (PoC) para evaluar herramientas gratuitas, académicamente gratuitas y/o de código abierto orientadas a la formulación, resolución y análisis de problemas de optimización matemática en Python con fines académicos, docentes y de investigación.
+Este repositorio contiene el desarrollo y evaluación de una suite gratuita y de código abierto para formulación, resolución, análisis y visualización de problemas de optimización matemática en Python, orientada a uso académico, docente y de investigación.
 
 > [!IMPORTANT]
-> **La arquitectura definitiva del proyecto todavía NO está decidida.**
-> En este momento se está evaluando la viabilidad, ergonomía y desempeño de **AMPL**, **amplpy** y el solver **HiGHS**. Posteriormente se evaluarán alternativas y complementos como **Pyomo**, **IPOPT**, **SCIP**, **pymoo** y métodos multiobjetivo.
+> **Backend provisional:** `Pyomo + HiGHS` (adoptado provisionalmente según [ADR-007](docs/DECISIONS.md#adr-007-pyomo--highs-como-backend-exacto-provisional)).  
+> **Backend comparativo de referencia:** `AMPL + HiGHS` (conservado y validado).
 
 ---
 
-## Naturaleza y Clasificación de Licencias
+## 🚀 MVP de Interfaz Web (Streamlit)
 
-Para total rigor conceptual y legal:
-* **HiGHS:** Software libre y de código abierto (*open source*, licencia MIT).
-* **AMPL:** Software comercial propietario que ofrece modalidades de uso gratuito y académico sujetas a los términos y condiciones de su licencia (AMPL Community Edition / Academic License).
-* **amplpy:** Paquete e interfaz oficial en Python para interactuar con el entorno AMPL.
+El proyecto incluye una aplicación web interactiva en Streamlit que permite formular, resolver y visualizar problemas lineales continuos sin necesidad de programar en Python.
+
+### Cómo Iniciar la Interfaz Web:
+```powershell
+& ".\.venv\Scripts\python.exe" -m streamlit run streamlit_app.py
+```
+La aplicación se abrirá automáticamente en su navegador en:  
+**`http://localhost:8501`**
+
+### Alcance y Capacidades Actuales del MVP:
+* **Programación Lineal Monoobjetivo (LP):**
+  * Variables continuas no negativas ($x_i \ge 0$).
+  * Sentido de optimización: Maximizar o Minimizar.
+  * Captura interactiva de coeficientes y restricciones lineales ($\le, \ge, =$).
+  * Reporte de solución óptima, valor objetivo, estado del solver, holguras y restricciones activas.
+  * Gráfico 2D de la región factible y vértice óptimo (cuando $n_{\text{vars}} = 2$).
+* **Programación Lineal Biobjetivo (LP):**
+  * Definición de dos funciones objetivo lineales ($Z_1, Z_2$) con sentidos independientes (Max/Min).
+  * Optimización individual y cálculo automático de la **matriz de pagos**.
+  * Cálculo dinámico de **rangos de normalización** ($\Delta Z_k = Z_{k,\max} - Z_{k,\min}$).
+  * Método de **ponderaciones normalizadas** ($W = \alpha_1 \frac{Z_1}{\Delta Z_1} + \alpha_2 \frac{Z_2}{\Delta Z_2}$).
+  * Modalidades: **Barrido uniforme automático** ($N$ combinaciones) o **Ponderación única personalizada**.
+  * Detección de soluciones repetidas y clasificación de **no dominancia de Pareto** sobre el conjunto discreto.
+  * Gráficos interactivos: espacio de objetivos ($Z_1$ vs. $Z_2$) y región factible 2D.
+* **Ejemplos Precargados en la Interfaz:**
+  * **Ejemplo 1 (Monoobjetivo):** $\text{MAX } Z = 3x_1 + 2x_2$, s.a. $x_1 + x_2 \le 4, x_1 \le 2, x_2 \le 3 \implies (x^*=(2,2), Z^*=10)$.
+  * **Ejemplo 2 (Benchmark A Biobjetivo):** $\text{MAX } Z_1 = 10x_1 + 3x_2, \text{MAX } Z_2 = 0.8x_1 + 1.3x_2$, s.a. $x_1 + x_2 \le 130, 2.5x_1 + x_2 \le 250 \implies 3$ soluciones únicas no dominadas: $A(0,130), B(80,50), C(100,0)$.
+
+### Qué Todavía NO Puede Resolver (Limitaciones Actuales):
+* Variables enteras o binarias (MILP).
+* Problemas no lineales continuos o enteros (NLP / MINLP).
+* Método de $\varepsilon$-restricciones (programado para el siguiente hito).
+* Algoritmos metaheurísticos / evolutivos (NSGA-II / pymoo).
+* Programación por metas o programación compromiso.
 
 ---
 
-## Estado Actual de Validación
+## 📦 Estructura del Código
 
-### Validado Actualmente:
-- ✅ Python `3.13.1` en Windows (entorno aislado `.venv`)
-- ✅ `amplpy==0.18.0` y `ampltools==0.7.5`
-- ✅ **AMPL Engine** (`ampl-module-base` v20260809)
-- ✅ **HiGHS Solver** (`ampl-module-highs` v20260813 / HiGHS 1.15.1)
-- ✅ Script de verificación reproducible [`verify_ampl_highs.py`](verify_ampl_highs.py) con aserciones programáticas.
-
-### Todavía NO Validado:
-- ❌ Benchmark A (problema biobjetivo)
-- ❌ Métodos multiobjetivo (matriz de pagos, puntos ideal/nadir)
-- ❌ Método de suma ponderada y normalización
-- ❌ Método de $\varepsilon$-restricciones
-- ❌ Clasificación y filtrado de soluciones de Pareto (dominancia, no dominancia, repetidas)
-- ❌ Integración de `pymoo` y algoritmos evolutivos (NSGA-II)
-- ❌ Integración de `IPOPT` y `SCIP`
-- ❌ Interfaz gráfica de usuario (Streamlit)
-- ❌ Decisión final de arquitectura (AMPL vs. Pyomo vs. APIs directas)
+```text
+solver-optimizador/
+│
+├── src/
+│   └── solver_optimizador/
+│       ├── __init__.py           # Exportaciones del paquete
+│       ├── lp_models.py          # Estructuras de datos (Problem, Objective, Constraint, Solution)
+│       ├── lp_solver.py          # Motor LP monoobjetivo (Pyomo + APPSI HiGHS)
+│       ├── multiobjective.py     # Motor multiobjetivo (matriz de pagos, pesos, Pareto)
+│       └── plotting.py           # Visualización 2D (region factible y espacio de objetivos)
+│
+├── streamlit_app.py              # Interfaz de usuario en Streamlit
+├── tests/
+│   └── test_lp_core.py           # Pruebas unitarias del motor matematico
+│
+├── benchmark_a_pyomo.py          # Benchmark A ejecutable con Pyomo
+├── benchmark_a_multiobjective.py # Benchmark A ejecutable con AMPL
+├── verify_ampl_highs.py          # Verificacion base de AMPL
+│
+├── requirements-pyomo.txt        # Dependencias de Pyomo + HiGHS
+├── requirements-ui.txt           # Dependencias de Streamlit + pytest
+├── requirements-ampl.txt         # Dependencias de AMPL + HiGHS
+├── pyproject.toml                # Configuracion de proyecto y dependencias
+└── docs/                         # Documentacion tecnica, ADRs y logs de agentes
+```
 
 ---
 
-## Instalación y Configuración del Entorno Validado
+## 🧪 Ejecución de Pruebas Unitarias
 
-El entorno virtual `.venv` **no está versionado** en el repositorio para mantener la higiene y portabilidad del código. Para reproducir el entorno desde cero:
-
-### 1. Clonar el repositorio
+Para ejecutar la suite de pruebas del motor matemático:
 ```powershell
-git clone https://github.com/NelsonBaza/solver-optimizador.git
-cd solver-optimizador
+& ".\.venv\Scripts\python.exe" -m pytest
 ```
-
-### 2. Crear el entorno virtual en Python 3.13
-```powershell
-python -m venv .venv
-```
-
-### 3. Instalar las dependencias exactas validadas
-```powershell
-& ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
-& ".\.venv\Scripts\python.exe" -m pip install -r requirements-ampl.txt
-```
-
-### 4. Descargar e instalar el módulo solver HiGHS para AMPL
-```powershell
-& ".\.venv\Scripts\python.exe" -c "from amplpy import modules; modules.install('highs')"
-```
-
-> [!NOTE]
-> El archivo [`requirements-proposed-full-stack.txt`](requirements-proposed-full-stack.txt) contiene una propuesta preliminar para fases posteriores y **no** debe instalarse en este checkpoint.
 
 ---
 
-## Ejecución del Script de Verificación
+## 📚 Documentación Técnica
 
-Ejecutar el script de prueba programática dentro del entorno virtual:
-
-```powershell
-& ".\.venv\Scripts\python.exe" verify_ampl_highs.py
-```
-
-### Modelo de Prueba Ejecutado:
-$$\begin{aligned}
-\text{Maximizar } & Z = 3x + 2y \\
-\text{s.a. } & x + y \le 4 \\
-& x \le 2 \\
-& y \le 3 \\
-& x \ge 0, \; y \ge 0
-\end{aligned}$$
-
-### Resultado Esperado:
-- **Estado:** `solved` (`solve_result_num = 0`, *optimal solution found*)
-- **Variables:** $x = 2.0$, $y = 2.0$
-- **Función Objetivo:** $Z = 10.0$
-
----
-
-## Regla Permanente de Trazabilidad para Agentes
-
-> **Regla Obligatoria:** Cada fase, benchmark o cambio arquitectónico relevante desarrollado por un asistente de IA debe generar un informe Markdown exhaustivo dentro de `docs/agent_logs/` antes del commit final correspondiente.
->
-> Los nombres deben seguir la convención: `YYYY-MM-DD_<descripcion_tarea>.md`.
-
-Consulte la carpeta [`docs/`](docs/) para acceder al estado técnico detallado ([`STATUS.md`](docs/STATUS.md)), guía de entorno ([`ENVIRONMENT.md`](docs/ENVIRONMENT.md)), registro de decisiones ([`DECISIONS.md`](docs/DECISIONS.md)) y los registros de auditoría de agentes ([`agent_logs/`](docs/agent_logs/)).
+* [`docs/STATUS.md`](docs/STATUS.md): Fotografía técnica del estado actual del proyecto.
+* [`docs/DECISIONS.md`](docs/DECISIONS.md): Registro histórico de decisiones arquitectónicas (ADR-001 a ADR-007).
+* [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](docs/BENCHMARK_A_BACKEND_COMPARISON.md): Comparativa exhaustiva Pyomo vs. AMPL.
+* [`docs/UI_MVP_VALIDATION.md`](docs/UI_MVP_VALIDATION.md): Informe de validación del MVP de interfaz.
+* [`docs/agent_logs/`](docs/agent_logs/): Registro detallado de auditoría de cada hito.

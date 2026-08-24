@@ -1,0 +1,3 @@
+# Dependencias para la interfaz Streamlit y tests del MVP
+streamlit==1.62.0
+pytest==9.1.1
