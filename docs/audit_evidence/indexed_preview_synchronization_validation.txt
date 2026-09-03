@@ -1,0 +1,155 @@
+FASE 3B.1 - SINCRONIZACION SEGURA DE LA VISTA PREVIA INDEXADA
+Fecha: 2026-09-03 (America/Bogota)
+Repositorio: https://github.com/NelsonBaza/solver-optimizador
+Rama: codex/fix-indexed-preview-synchronization
+Commit base: 9e8a18698b78791ac832c471ceaf0f5b444ae1ea
+
+DEFECTO OBSERVADO
+Una preview compilada permanecia aplicable aunque el usuario hubiese cambiado
+despues conjuntos, parametros, objetivos o familias visibles. El modelo aplicado
+podia no corresponder a la formulacion mostrada.
+
+SOLUCION IMPLEMENTADA
+- build_indexed_spec_signature() genera SHA-256 sobre JSON canonico.
+- Canonicalizacion: sort_keys=True, separators=(",", ":"), ensure_ascii=False.
+- La firma incluye indexed_schema_version, nombre, descripcion, conjuntos,
+  parametros escalares, parametros indexados, familias de variables, objetivos
+  y familias de restricciones.
+- Excluye timestamps, widget IDs, editor_version y metadatos visuales.
+- Validar/compilar guarda preview y indexed_compile_preview_signature.
+- La UI reconstruye la misma fuente efectiva antes de habilitar Aplicar. Si hay
+  CSV de parametros cargado, se usan exactamente sus bytes decodificados como
+  en la compilacion.
+- apply_indexed_preview_if_current() vuelve a verificar la firma de la fuente
+  visible y la firma de preview.source_spec antes de mutar estado.
+- Una discrepancia no llama apply_indexed_model() y no modifica variables,
+  restricciones, solucion, editor_version ni indexed_source_status.
+
+CONTRATOS DE FIRMA
+- Misma especificacion -> misma firma: PASS.
+- demanda/cap[índice] modificado -> firma distinta: PASS.
+- Expresion X[t] <= cap[t] -> 2*X[t] <= cap[t] -> firma distinta: PASS.
+- Coeficiente del objetivo 1 -> 2 -> firma distinta: PASS.
+- Limite de conjunto modificado -> firma distinta: PASS.
+- Orden distinto de claves values con los mismos pares -> misma firma: PASS.
+
+VERIFICADOR REPRODUCIBLE
+Comando: python tools/audit/verify_indexed_preview_synchronization.py
+CASE A PASS: parameter change produces distinct signatures
+CASE B PASS: preview A + effective CSV/spec B blocked with zero state mutation
+CASE C PASS: recompiled B applied; Cap_2 rhs=999; source=synchronized
+CASE D PASS: parameter value dictionary order does not alter signature
+RESULT: PASS (indexed preview synchronization contract satisfied)
+
+VALIDAR -> EDITAR -> APLICAR
+Streamlit AppTest compilo el modelo T=1..10, sustituyo cap[T,5]=10 por 999 sin
+recompilar y verifico:
+- boton Aplicar modelo indexado deshabilitado;
+- aviso Debe validar y compilar nuevamente;
+- var_names sin cambios;
+- constraints_data sin cambios;
+- last_solution sin cambios;
+- editor_version sin cambios;
+- indexed_source_status no paso a synchronized.
+Resultado: PASS.
+
+RECOMPILAR -> APLICAR
+Tras recompilar, la firma cambio, el boton se habilito, CapX_5 y CapY_5 quedaron
+con rhs=999 y el solver reporto esas restricciones con rhs=999.
+indexed_source_status=synchronized.
+Resultado: PASS.
+
+CSV A -> CSV B
+AppTest cargo parameters_a.csv, compilo, sustituyo el uploader por
+parameters_b.csv con cap[T,5]=999 y comprobo que la preview A quedo bloqueada.
+Tras recompilar B, rhs=999 se aplico correctamente.
+Resultado: PASS.
+
+JSON INDEXADO A -> JSON INDEXADO B
+AppTest comprobo que Cargar JSON indexado B elimina la preview y su firma; el
+boton Aplicar no existe hasta volver a compilar.
+Resultado: PASS.
+
+STREAMLIT APPTEST
+- tests/test_streamlit_indexed_model.py: 4 PASS.
+- Flujo normal compilar/aplicar/resolver: PASS.
+- Edicion sin recompilar bloqueada: PASS.
+- Cambio de CSV efectivo bloqueado: PASS.
+- Cambio de JSON invalida preview/firma: PASS.
+
+PRUEBA MANUAL / SERVIDOR
+Comando: python -m streamlit run streamlit_app.py --server.headless true --server.port 8501
+- Uvicorn/Streamlit inicio correctamente en localhost:8501.
+- GET http://localhost:8501/ -> HTTP 200; contenido Streamlit presente.
+- El entorno no expuso un navegador conectado para completar una inspeccion
+  visual manual. El recorrido interactivo equivalente se ejecuto con AppTest,
+  incluyendo el aviso, bloqueo, recompilacion, aplicacion y resolucion.
+- El proceso Streamlit se detuvo al finalizar la comprobacion.
+
+REGRESIONES FASE 3B
+- verify_indexed_model_scaling.py: PASS; T=1..1000, 3000 variables,
+  5000 restricciones, 7000 no ceros.
+- verify_indexed_hydroelectric_equivalence.py: PASS; ambos optimal,
+  Z=6701.25, diferencia maxima de residuos=0.
+- verify_indexed_expression_safety.py: PASS.
+- verify_streamlit_indexed_model.py: PASS; 20 restricciones aplicadas y resueltas.
+
+REGRESIONES FASE 3A / 3A.1
+- verify_scalable_input_hardening.py: PASS.
+- verify_scalable_constraint_input.py: PASS.
+- verify_streamlit_scalable_input.py: PASS.
+
+REGRESIONES FASE 2A / 2B
+- verify_numeric_integrity.py: PASS.
+- verify_weighted_method_exact.py: PASS.
+- verify_weighted_method_production.py: PASS.
+- Benchmark A conserva sus tres soluciones academicas.
+- Hidroelectrico monoobjetivo conserva Z*=6701.25.
+
+PYTEST COMPLETO
+Comando: python -m pytest -ra -W default
+Python: 3.13.1
+pytest: 9.1.1
+collected: 209
+PASS: 209
+FAIL: 0
+SKIP: 0
+Tiempo: 14.37 s
+Warning: PytestCacheWarning por permiso denegado al crear .pytest_cache; no
+afecta la ejecucion ni los resultados.
+
+COMPILACION
+Comando: python -m compileall -q src streamlit_app.py tools/audit
+Resultado: PASS.
+
+WARNINGS RELEVANTES
+- Streamlit AppTest en modo bare informa missing ScriptRunContext; esperado para
+  el harness y sin excepciones de aplicacion.
+- El verificador heredado de entrada escalable emite warnings de tight_layout en
+  plotting.py; fuera del alcance de esta correccion.
+- AUD-HIGH-06 permanece ABIERTO.
+
+ALCANCE CONFIRMADO
+- indexed_expression.py: sin cambios.
+- compile_indexed_model: matematica sin cambios.
+- lp_solver.py: sin cambios.
+- multiobjective.py y metodo de ponderaciones: sin cambios.
+- Backend Pyomo/APPSI HiGHS: sin cambios.
+- No se integro Gurobi, Fase 3C, indices multidimensionales, MILP ni IDs internos.
+
+ARCHIVOS CREADOS
+- docs/audit_evidence/indexed_preview_synchronization_validation.txt
+- tests/test_indexed_preview_sync.py
+- tools/audit/verify_indexed_preview_synchronization.py
+
+ARCHIVOS MODIFICADOS
+- docs/AUDITORIA_TECNICA_MATEMATICA.md
+- docs/MODELADO_INDEXADO.md
+- src/solver_optimizador/__init__.py
+- src/solver_optimizador/indexed_application.py
+- src/solver_optimizador/indexed_model.py
+- streamlit_app.py
+- tests/test_streamlit_indexed_model.py
+
+ARCHIVO HISTORICO CONSERVADO SIN CAMBIOS
+- docs/audit_evidence/indexed_model_families_validation.txt

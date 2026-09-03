@@ -751,7 +751,9 @@ Ningún otro hallazgo de esta auditoría se marca como corregido en Fase 2A.
   no se considera corregido hasta desacoplar nombres visibles e IDs internos.
   Fase 3B aplica esa misma salvaguarda a los nombres base de familias y genera
   etiquetas deterministas `FAMILIA_INDICE`, pero no introduce IDs internos; el
-  estado continúa **ABIERTO**.
+  estado continúa **ABIERTO**. Fase 3B.1 añade exclusivamente una firma SHA-256
+  para impedir que una vista previa indexada obsoleta se aplique; este hardening
+  de sincronización no cambia ni cierra el presente hallazgo.
 - **Severidad:** ALTO
 - **Archivo:** `src/solver_optimizador/lp_solver.py:46-63`; `src/solver_optimizador/multiobjective.py:304-327`; validación UI/builder.
 - **Función/líneas:** construcción dinámica mediante `setattr`.

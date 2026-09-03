@@ -132,6 +132,27 @@ Si luego se edita el modelo explícito por la ruta manual, CSV, XLSX o dispersa,
 `indexed_source_status` cambia a `stale`; la interfaz no afirma que ambas fuentes
 sigan sincronizadas.
 
+### Sincronización de la vista previa
+
+“Validar y compilar” crea una fotografía matemática de todos los campos visibles,
+incluido el contenido efectivo de un CSV de parámetros si está cargado. La
+aplicación guarda junto a esa fotografía una firma SHA-256 determinista de nombre,
+descripción, conjuntos, parámetros, variables, objetivos y restricciones.
+
+Antes de habilitar “Aplicar modelo indexado”, la interfaz reconstruye nuevamente
+la especificación visible y compara su firma. Si cualquier dato cambió desde la
+compilación —también un archivo CSV o JSON—, el botón queda bloqueado y se solicita
+validar y compilar otra vez. Al pulsar aplicar se repite la comparación como última
+barrera; un desacuerdo no modifica variables, restricciones, solución ni versión
+del editor.
+
+Esta vigencia de la *preview* no es lo mismo que el estado de la fuente aplicada:
+
+- `indexed_compile_preview_signature` vincula la fotografía compilada con los
+  campos indexados actuales;
+- `indexed_source_status` indica si una especificación ya aplicada continúa
+  sincronizada con el modelo explícito después de posibles ediciones manuales.
+
 ## Ejemplos y alcance
 
 La interfaz incluye una planificación académica de producción de seis períodos.

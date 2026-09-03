@@ -58,7 +58,12 @@ from .input_application import (
     apply_objective_import,
     apply_variable_import,
 )
-from .indexed_application import apply_indexed_model, mark_indexed_source_stale
+from .indexed_application import (
+    IndexedPreviewSynchronizationError,
+    apply_indexed_model,
+    apply_indexed_preview_if_current,
+    mark_indexed_source_stale,
+)
 from .indexed_compiler import compile_indexed_model
 from .indexed_model import (
     INDEXED_SCHEMA_VERSION,
@@ -71,7 +76,9 @@ from .indexed_model import (
     ObjectiveTermSpec,
     ScalarParameterSpec,
     VariableFamilySpec,
+    build_indexed_spec_signature,
     deserialize_indexed_model_spec,
+    is_indexed_preview_current,
     serialize_indexed_model_spec,
 )
 from .plotting import (
@@ -139,7 +146,11 @@ __all__ = [
     "ExpandedIndexedModel",
     "compile_indexed_model",
     "apply_indexed_model",
+    "apply_indexed_preview_if_current",
+    "IndexedPreviewSynchronizationError",
     "mark_indexed_source_stale",
+    "build_indexed_spec_signature",
+    "is_indexed_preview_current",
     "serialize_indexed_model_spec",
     "deserialize_indexed_model_spec",
     "solve_lp",

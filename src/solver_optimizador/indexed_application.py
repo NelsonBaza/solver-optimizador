@@ -6,7 +6,16 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, MutableMapping
 
 from .indexed_compiler import compile_indexed_model
-from .indexed_model import ExpandedIndexedModel, IndexedModelSpec, indexed_model_spec_to_dict
+from .indexed_model import (
+    ExpandedIndexedModel,
+    IndexedModelSpec,
+    build_indexed_spec_signature,
+    indexed_model_spec_to_dict,
+)
+
+
+class IndexedPreviewSynchronizationError(ValueError):
+    """La vista previa no corresponde a la especificacion indexada actual."""
 
 
 def _set(state: Any, key: str, value: Any) -> None:
@@ -85,3 +94,29 @@ def apply_indexed_model(
         },
     )
     return expanded
+
+
+def apply_indexed_preview_if_current(
+    state: Any,
+    preview: ExpandedIndexedModel,
+    current_spec: IndexedModelSpec,
+    preview_signature: str | None,
+) -> ExpandedIndexedModel:
+    """Aplica una preview solo si ambas fuentes coinciden con su firma guardada."""
+
+    if not preview_signature:
+        raise IndexedPreviewSynchronizationError(
+            "No existe una firma de compilacion vigente. Valide y compile nuevamente."
+        )
+    signed_preview = build_indexed_spec_signature(preview.source_spec)
+    if signed_preview != preview_signature:
+        raise IndexedPreviewSynchronizationError(
+            "La vista previa almacenada no coincide con su firma. Valide y compile nuevamente."
+        )
+    current_signature = build_indexed_spec_signature(current_spec)
+    if current_signature != preview_signature:
+        raise IndexedPreviewSynchronizationError(
+            "La especificacion cambio despues de la ultima compilacion. "
+            "Debe validar y compilar nuevamente antes de aplicar."
+        )
+    return apply_indexed_model(state, preview)

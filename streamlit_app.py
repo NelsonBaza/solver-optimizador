@@ -67,13 +67,15 @@ from solver_optimizador.input_application import (
     apply_variable_import,
 )
 from solver_optimizador.indexed_application import (
-    apply_indexed_model,
+    apply_indexed_preview_if_current,
     mark_indexed_source_stale,
 )
 from solver_optimizador.indexed_compiler import compile_indexed_model
 from solver_optimizador.indexed_examples import production_planning_example_spec
 from solver_optimizador.indexed_model import (
+    build_indexed_spec_signature,
     deserialize_indexed_model_spec,
+    is_indexed_preview_current,
     serialize_indexed_model_spec,
 )
 from solver_optimizador.indexed_text_io import (
@@ -257,6 +259,25 @@ def _load_indexed_example_tables() -> None:
     for key, value in tables.items():
         st.session_state[f"indexed_{key}_text"] = value
     st.session_state.indexed_compile_preview = None
+    st.session_state.indexed_compile_preview_signature = None
+
+
+def _build_visible_indexed_spec(indexed_parameter_file=None):
+    """Reconstruye la fuente efectiva usada tanto para validar como para aplicar."""
+
+    indexed_parameter_text = st.session_state.indexed_indexed_text
+    if indexed_parameter_file is not None:
+        indexed_parameter_text = indexed_parameter_file.getvalue().decode("utf-8-sig")
+    return parse_indexed_tables(
+        name=st.session_state.indexed_model_name,
+        description=st.session_state.indexed_model_description,
+        sets_text=st.session_state.indexed_sets_text,
+        scalar_parameters_text=st.session_state.indexed_scalars_text,
+        indexed_parameters_text=indexed_parameter_text,
+        variable_families_text=st.session_state.indexed_variables_text,
+        objectives_text=st.session_state.indexed_objectives_text,
+        constraint_families_text=st.session_state.indexed_constraints_text,
+    )
 
 
 def _render_indexed_modeling() -> None:
@@ -295,6 +316,7 @@ def _render_indexed_modeling() -> None:
                 for key, value in tables.items():
                     st.session_state[f"indexed_{key}_text"] = value
                 st.session_state.indexed_compile_preview = None
+                st.session_state.indexed_compile_preview_signature = None
                 st.rerun()
             except (UnicodeDecodeError, ValueError) as exc:
                 st.error(str(exc), icon=":material/error:")
@@ -346,28 +368,40 @@ def _render_indexed_modeling() -> None:
         st.markdown("**Paso 2 · Validar y compilar vista previa**")
         if st.button("Validar y compilar modelo indexado", type="primary", icon=":material/rule:"):
             try:
-                indexed_parameter_text = st.session_state.indexed_indexed_text
-                if indexed_parameter_file is not None:
-                    indexed_parameter_text = indexed_parameter_file.getvalue().decode("utf-8-sig")
-                spec = parse_indexed_tables(
-                    name=st.session_state.indexed_model_name,
-                    description=st.session_state.indexed_model_description,
-                    sets_text=st.session_state.indexed_sets_text,
-                    scalar_parameters_text=st.session_state.indexed_scalars_text,
-                    indexed_parameters_text=indexed_parameter_text,
-                    variable_families_text=st.session_state.indexed_variables_text,
-                    objectives_text=st.session_state.indexed_objectives_text,
-                    constraint_families_text=st.session_state.indexed_constraints_text,
+                spec = _build_visible_indexed_spec(indexed_parameter_file)
+                preview = compile_indexed_model(spec)
+                st.session_state.indexed_compile_preview = preview
+                st.session_state.indexed_compile_preview_signature = (
+                    build_indexed_spec_signature(preview.source_spec)
                 )
-                st.session_state.indexed_compile_preview = compile_indexed_model(spec)
             except (UnicodeDecodeError, ValueError) as exc:
                 st.session_state.indexed_compile_preview = None
+                st.session_state.indexed_compile_preview_signature = None
                 st.error(str(exc), icon=":material/error:")
 
         preview = st.session_state.indexed_compile_preview
         if preview is not None:
+            current_spec = None
+            current_spec_error = None
+            try:
+                current_spec = _build_visible_indexed_spec(indexed_parameter_file)
+                preview_is_current = is_indexed_preview_current(
+                    current_spec,
+                    st.session_state.indexed_compile_preview_signature,
+                )
+            except (UnicodeDecodeError, ValueError) as exc:
+                preview_is_current = False
+                current_spec_error = str(exc)
             stats = preview.statistics
-            st.success("Especificacion valida y compilada sin modificar el modelo actual.")
+            if preview_is_current:
+                st.success("Especificacion vigente compilada sin modificar el modelo actual.")
+            else:
+                st.warning(
+                    "La especificación cambió después de la última compilación. "
+                    "Debe validar y compilar nuevamente antes de aplicar."
+                )
+                if current_spec_error:
+                    st.caption(f"La fuente visible tampoco puede analizarse: {current_spec_error}")
             with st.container(horizontal=True):
                 st.metric("Conjuntos", stats["sets"])
                 st.metric("Parámetros", stats["parameters"])
@@ -391,13 +425,27 @@ def _render_indexed_modeling() -> None:
                 mime="application/json",
             )
             st.markdown("**Paso 3 · Aplicar al modelo explícito actual**")
-            if st.button("Aplicar modelo indexado", type="primary", icon=":material/check_circle:"):
-                applied = apply_indexed_model(st.session_state, preview)
-                st.session_state.example_msg = (
-                    f"{applied.statistics['generated_variables']} variables y "
-                    f"{applied.statistics['generated_constraints']} restricciones generadas y aplicadas."
-                )
-                st.rerun()
+            if st.button(
+                "Aplicar modelo indexado",
+                type="primary",
+                icon=":material/check_circle:",
+                disabled=not preview_is_current,
+            ):
+                try:
+                    current_spec = _build_visible_indexed_spec(indexed_parameter_file)
+                    applied = apply_indexed_preview_if_current(
+                        st.session_state,
+                        preview,
+                        current_spec,
+                        st.session_state.indexed_compile_preview_signature,
+                    )
+                    st.session_state.example_msg = (
+                        f"{applied.statistics['generated_variables']} variables y "
+                        f"{applied.statistics['generated_constraints']} restricciones generadas y aplicadas."
+                    )
+                    st.rerun()
+                except (UnicodeDecodeError, ValueError) as exc:
+                    st.error(str(exc), icon=":material/error:")
 
 
 # ---------------------------------------------------------------------------
@@ -469,6 +517,8 @@ def _init_session_state():
         st.session_state.formulation_route = "Formulación explícita"
     if "indexed_compile_preview" not in st.session_state:
         st.session_state.indexed_compile_preview = None
+    if "indexed_compile_preview_signature" not in st.session_state:
+        st.session_state.indexed_compile_preview_signature = None
     if "indexed_source_spec" not in st.session_state:
         st.session_state.indexed_source_spec = None
     if "indexed_source_status" not in st.session_state:
@@ -508,6 +558,7 @@ def _clear_indexed_source(state) -> None:
     state.indexed_source_status = None
     state.indexed_model_metadata = None
     state.indexed_compile_preview = None
+    state.indexed_compile_preview_signature = None
 
 
 def _new_model(state=None):

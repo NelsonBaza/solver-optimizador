@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
@@ -175,6 +176,29 @@ def serialize_indexed_model_spec(spec: IndexedModelSpec) -> str:
     """Serializa la fuente indexada; no mezcla este esquema con el JSON explicito."""
 
     return json.dumps(indexed_model_spec_to_dict(spec), indent=2, ensure_ascii=False)
+
+
+def build_indexed_spec_signature(spec: IndexedModelSpec) -> str:
+    """Firma SHA-256 determinista de toda la fuente indexada relevante."""
+
+    canonical_payload = json.dumps(
+        indexed_model_spec_to_dict(spec),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical_payload).hexdigest()
+
+
+def is_indexed_preview_current(
+    current_spec: IndexedModelSpec,
+    preview_signature: str | None,
+) -> bool:
+    """Indica si la fuente visible coincide con la fotografia compilada."""
+
+    return bool(preview_signature) and (
+        build_indexed_spec_signature(current_spec) == preview_signature
+    )
 
 
 def deserialize_indexed_model_spec(payload: str) -> IndexedModelSpec:
