@@ -1,0 +1,183 @@
+FASE 2B — EVIDENCIA POST-FIX DE AUD-HIGH-01
+================================================
+
+Fecha: 2026-09-02T21:40:10.2481755-05:00
+Repositorio: solver-optimizador
+Rama: codex/fix-aud-high-01-weighted-method
+Commit base: 16dd877df93eea04b1c7d900f2d714c08d705492
+
+ERROR ANTERIOR
+--------------
+El flujo usaba anclas seleccionadas como sustitutos de los pesos extremos y,
+para los pesos interiores, publicaba:
+
+  W_pre = alpha1*s1*Z1/DeltaZ1 + alpha2*s2*Z2/DeltaZ2
+
+Esa expresion puede conservar el argmax por una constante, pero no produce los
+valores normalizados N1, N2 y W declarados al usuario.
+
+CONTRATO NUEVO
+--------------
+  MAX: Nk = (Zk - Zk_min)/(Zk_max - Zk_min)
+  MIN: Nk = (Zk_max - Zk)/(Zk_max - Zk_min)
+  W = alpha1*N1 + alpha2*N2
+  resolver MAX W sujeto a todas las restricciones originales
+
+Todas las ponderaciones, incluidos (1,0) y (0,1), pasan por el solver ponderado.
+La seleccion secundaria de representantes de anclas es preprocesamiento y no
+se presenta como otro metodo. La seleccion posterior de un endpoint, cuando
+aplica, fija y conserva W* y queda registrada en selection_metadata.
+
+BENCHMARK A — MATRIZ DE PAGOS
+-----------------------------
+                 Z1    Z2
+  optimo Z1    1000    80    x=(100,0)
+  optimo Z2     390   169    x=(0,130)
+
+  Delta Z1 = 610
+  Delta Z2 = 89
+  N1 = (Z1-390)/610
+  N2 = (Z2-80)/89
+
+BENCHMARK A — SIETE PONDERACIONES DE PRODUCCION
+------------------------------------------------
+alpha=(0.0,1.0) x=(0,130)   Z1=390  Z2=169 N1=0              N2=1              W=1
+alpha=(0.2,0.8) x=(0,130)   Z1=390  Z2=169 N1=0              N2=1              W=0.8
+alpha=(0.4,0.6) x=(80,50)   Z1=950  Z2=129 N1=0.918032786885 N2=0.550561797753 W=0.697550193406
+alpha=(0.5,0.5) x=(80,50)   Z1=950  Z2=129 N1=0.918032786885 N2=0.550561797753 W=0.734297292319
+alpha=(0.6,0.4) x=(80,50)   Z1=950  Z2=129 N1=0.918032786885 N2=0.550561797753 W=0.771044391232
+alpha=(0.8,0.2) x=(80,50)   Z1=950  Z2=129 N1=0.918032786885 N2=0.550561797753 W=0.844538589059
+alpha=(1.0,0.0) x=(100,0)   Z1=1000 Z2=80  N1=1              N2~=0             W=1
+
+CASO HIDROELECTRICO MIN/MAX
+---------------------------
+Anclas: mejor costo (6701.25,40); mejor reserva (21416.25,100)
+N1=(21416.25-Z1)/14715; N2=(Z2-40)/60
+
+alpha=(0.2,0.8) Z1=21416.25 Z2=100 N1=0 N2=1 W=0.8 frontera_residuo=0
+alpha=(0.4,0.6) Z1=21416.25 Z2=100 N1=0 N2=1 W=0.6 frontera_residuo=0
+alpha=(0.5,0.5) Z1=6701.25  Z2=40  N1=1 N2~=0 W=0.5 frontera_residuo=-3.64e-12
+alpha=(0.6,0.4) Z1=6701.25  Z2=40  N1=1 N2~=0 W=0.6 frontera_residuo=-2.73e-12
+alpha=(0.8,0.2) Z1=6701.25  Z2=40  N1=1 N2~=0 W=0.8 frontera_residuo=-2.73e-12
+
+Para 0.5/0.5 no se exige un vector especifico: la solucion observada es
+factible, cumple Z1=245.25*Z2-3108.75 dentro de 3.64e-12 y W=0.5.
+
+ORACULO EXACTO INDEPENDIENTE
+----------------------------
+Comando:
+  python tools/audit/verify_weighted_method_exact.py
+
+Salida:
+NORMALIZED_WEIGHTED_METHOD_EXACT_ORACLE
+normalization: N1=(Z1-390)/610; N2=(Z2-80)/89
+objective: MAX W=alpha1*N1+alpha2*N2
+payoff: opt_Z1=(100,0;1000,80) opt_Z2=(0,130;390,169)
+alpha1=0.0 alpha2=1.0 x=(0,130) Z1=390 Z2=169 N1=0 N2=1 W=1
+alpha1=0.2 alpha2=0.8 x=(0,130) Z1=390 Z2=169 N1=0 N2=1 W=4/5
+alpha1=0.4 alpha2=0.6 x=(80,50) Z1=950 Z2=129 N1=56/61 N2=49/89 W=3787/5429
+alpha1=0.6 alpha2=0.4 x=(80,50) Z1=950 Z2=129 N1=56/61 N2=49/89 W=4186/5429
+alpha1=0.8 alpha2=0.2 x=(80,50) Z1=950 Z2=129 N1=56/61 N2=49/89 W=4585/5429
+alpha1=1.0 alpha2=0.0 x=(100,0) Z1=1000 Z2=80 N1=1 N2=0 W=1
+alpha1=0.5 alpha2=0.5 x=(80,50) Z1=950 Z2=129 N1=56/61 N2=49/89 W=7973/10858
+RESULT: PASS (pure normalized weighted-sum oracle satisfied)
+
+VERIFICADOR DE PRODUCCION
+-------------------------
+Comando:
+  python tools/audit/verify_weighted_method_production.py
+
+Resultado:
+  Benchmark A: siete ponderaciones reconstruibles; PASS.
+  Hidroelectrico: cinco ponderaciones, factibilidad/frontera/W; PASS.
+  RESULT: PASS (production normalized weighted-sum contract satisfied)
+
+INTEGRIDAD NUMERICA DE FASE 2A
+------------------------------
+Comando:
+  python tools/audit/verify_numeric_integrity.py
+
+Salida:
+NUMERIC_INTEGRITY_CONTRACT_VERIFICATION
+expected_x=1.0000000000000001e-09
+published_x=1.0000000000000001e-09
+published_objective=1
+reconstructed_objective_from_published_x=1
+published_lhs=1
+reconstructed_lhs_from_published_x=1
+RESULT: PASS (numeric integrity contract satisfied)
+
+PYTEST COMPLETO
+---------------
+Comando:
+  python -m pytest -ra -W default
+
+Salida:
+  platform win32 -- Python 3.13.1, pytest-9.1.1, pluggy-1.6.0
+  collected 96 items
+  tests/test_custom_variables.py ........ 6 PASS
+  tests/test_hydroelectric_e2e.py .... 4 PASS
+  tests/test_interpretation.py ........ 8 PASS
+  tests/test_lexicographic_payoff.py ............ 12 PASS
+  tests/test_lp_core.py ............ 12 PASS
+  tests/test_model_io.py ............ 12 PASS
+  tests/test_model_signature.py ....... 7 PASS
+  tests/test_numeric_integrity.py ....... 7 PASS
+  tests/test_plotting_extended.py .... 4 PASS
+  tests/test_streamlit_integrity.py .... 4 PASS
+  tests/test_weighted_method.py .................... 20 PASS
+  96 passed, 0 failed, 0 skipped, 1 warning in 8.36s
+
+Warning:
+  PytestCacheWarning: no se pudo crear .pytest_cache por WinError 5.
+  No afecto la ejecucion ni los asserts.
+
+COMPILACION
+-----------
+Comandos:
+  python -m compileall -q src streamlit_app.py tools/audit
+  python -m py_compile benchmark_a_pyomo.py benchmark_a_multiobjective.py
+
+Resultado:
+  Exit code 0; sin salida.
+
+ARCHIVOS DE PRODUCCION MODIFICADOS
+---------------------------------
+  src/solver_optimizador/__init__.py
+  src/solver_optimizador/multiobjective.py
+  src/solver_optimizador/interpretation.py
+  streamlit_app.py
+
+TESTS CREADOS/MODIFICADOS
+-------------------------
+  tests/test_weighted_method.py (nuevo; 20 casos recolectados)
+  tests/test_lexicographic_payoff.py
+  tests/test_numeric_integrity.py
+  tests/test_streamlit_integrity.py
+
+ARTEFACTOS Y DOCUMENTOS
+-----------------------
+  docs/METODO_PONDERACIONES.md (nuevo; especificacion normativa)
+  tools/audit/verify_weighted_method_exact.py (nuevo; oraculo independiente)
+  tools/audit/verify_weighted_method_production.py (nuevo; verificador productivo)
+  tools/audit/verify_benchmark_a_exact.py
+  README.md
+  docs/AUDITORIA_TECNICA_MATEMATICA.md
+  docs/BENCHMARK_A.md
+  docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md (marcado historico)
+  docs/STATUS.md (marcado snapshot historico)
+  benchmark_a_pyomo.py
+  benchmark_a_multiobjective.py
+  results/benchmark_a_results.json (metadato historico PRE-Fase-2B)
+  results/benchmark_a_pyomo_results.json (metadato historico PRE-Fase-2B)
+
+CONFIRMACION DE ALCANCE
+-----------------------
+  AUD-CRIT-01 permanece corregido.
+  AUD-HIGH-01 queda corregido por esta fase.
+  AUD-HIGH-02 permanece abierto: no hay certificado general de unicidad o multiplicidad.
+  El optimo monoobjetivo hidroelectrico permanece Z*=6701.25.
+  No se cambio la region factible, el backend Pyomo/HiGHS, el comportamiento
+  de importacion/exportacion JSON, plotting,
+  entrada de restricciones, dominios de variables ni tolerancias de Pareto.
+  AUD-MED-04 permanece abierto: la tolerancia historica de suma de pesos no se modifico.

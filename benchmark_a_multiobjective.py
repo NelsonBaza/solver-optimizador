@@ -147,7 +147,10 @@ def run_benchmark_a() -> Dict[str, Any]:
     param a2;
     param r1 default {z1_range};
     param r2 default {z2_range};
-    maximize W: a1 * (10*x1 + 3*x2) / r1 + a2 * (0.8*x1 + 1.3*x2) / r2;
+    param z1min default {z1_min};
+    param z2min default {z2_min};
+    maximize W: a1 * ((10*x1 + 3*x2) - z1min) / r1
+              + a2 * ((0.8*x1 + 1.3*x2) - z2min) / r2;
     objective W;
     """)
 
@@ -169,17 +172,21 @@ def run_benchmark_a() -> Dict[str, Any]:
         x2_val = float(ampl.get_variable("x2").value())
         z1_val = 10.0 * x1_val + 3.0 * x2_val
         z2_val = 0.8 * x1_val + 1.3 * x2_val
+        n1_val = (z1_val - z1_min) / z1_range
+        n2_val = (z2_val - z2_min) / z2_range
         w_val = float(ampl.get_objective("W").value())
 
         run_data = {
             "run_index": i + 1,
             "alpha1": a1,
             "alpha2": a2,
-            "x1": round(x1_val, 4),
-            "x2": round(x2_val, 4),
-            "Z1": round(z1_val, 4),
-            "Z2": round(z2_val, 4),
-            "W": round(w_val, 6),
+            "x1": x1_val,
+            "x2": x2_val,
+            "Z1": z1_val,
+            "Z2": z2_val,
+            "N1": n1_val,
+            "N2": n2_val,
+            "W": w_val,
             "solve_result": res_state
         }
         weighted_runs.append(run_data)

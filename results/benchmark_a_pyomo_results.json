@@ -6,7 +6,9 @@
     "pyomo_version": "6.10.1",
     "highspy_version": "1.15.1",
     "solver": "HiGHS (1.15.1)",
-    "problem_type": "Biobjective Continuous LP"
+    "problem_type": "Biobjective Continuous LP",
+    "artifact_status": "historical_pre_phase2b",
+    "weighted_value_definition": "legacy_unshifted_objectives_divided_by_ranges"
   },
   "individual_optima": {
     "Z1_max": {

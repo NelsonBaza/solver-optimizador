@@ -17,7 +17,12 @@ from .lp_models import (
     is_finite_number,
 )
 from .lp_solver import solve_lp
-from .multiobjective import solve_biobjective_weighted, solve_lexicographic_extreme, generate_weight_combinations
+from .multiobjective import (
+    generate_weight_combinations,
+    normalize_objective_value,
+    solve_biobjective_weighted,
+    solve_lexicographic_extreme,
+)
 from .signature import build_model_signature
 from .interpretation import interpret_mono_solution, interpret_biobjective_solution
 from .model_io import (
@@ -74,4 +79,5 @@ __all__ = [
     "solve_biobjective_weighted",
     "solve_lexicographic_extreme",
     "generate_weight_combinations",
+    "normalize_objective_value",
 ]

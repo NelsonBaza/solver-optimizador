@@ -1,5 +1,12 @@
 # Estado Técnico del Proyecto (Snapshot)
 
+> [!IMPORTANT]
+> Este archivo es una fotografía histórica con fecha de corte 2026-08-23. Para
+> el método multiobjetivo vigente desde Fase 2B consulte
+> [`METODO_PONDERACIONES.md`](METODO_PONDERACIONES.md) y la evidencia en
+> `docs/audit_evidence/aud_high_01_weighted_method_validation.txt`. El conteo
+> actual de pruebas se registra en esa evidencia.
+
 * **Fecha de corte:** 2026-08-23
 * **Sistema Operativo:** Windows 11 / Windows Server (64-bit, `x86_64`)
 * **Python (Global):** `3.13.1` (MSC v.1942 64-bit AMD64)

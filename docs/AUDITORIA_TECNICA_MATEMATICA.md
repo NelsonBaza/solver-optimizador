@@ -17,7 +17,7 @@ La aplicación resuelve correctamente los tres casos numéricos contrastados —
 El flujo básico UI → normalización → builder → Pyomo/HiGHS funciona para los ejemplos cubiertos. La suite completa pasó: 69 de 69 pruebas. Sin embargo, la auditoría encontró un defecto **CRÍTICO** de trazabilidad numérica y varios hallazgos **ALTOS**:
 
 1. El solver redondea cada variable a seis decimales antes de publicarla. El objetivo y los LHS se calculan con valores internos no redondeados, por lo que un mismo resultado puede contradecirse a sí mismo y parecer infactible al reconstruirlo.
-2. El módulo denominado “método de ponderaciones” es un procedimiento híbrido: usa optimización lexicográfica para construir los extremos y para sustituir los pesos extremos, y suma ponderada normalizada en los pesos interiores.
+2. La versión auditada del módulo denominado “método de ponderaciones” era un procedimiento híbrido: usaba selección lexicográfica para construir anclas y sustituir pesos extremos, y una suma por rangos sin desplazamiento en los pesos interiores. `AUD-HIGH-01` fue corregido en Fase 2B.
 3. La interpretación declara “degeneración” para cualquier ejecución única con pesos `(0.5, 0.5)`, aunque el óptimo sea único.
 4. La UI puede perder silenciosamente ediciones de restricciones al cambiar la estructura de variables, porque la tabla editada no se sincroniza con `session_state.constraints_data`.
 5. La gráfica 2D puede sombrear un triángulo como región factible aunque el politopo sea no acotado.
@@ -25,7 +25,7 @@ El flujo básico UI → normalización → builder → Pyomo/HiGHS funciona para
 7. `<` y `>` no son capacidades reales: una ruta los rechaza y otra los transforma silenciosamente en `<=` y `>=`.
 8. El fixture hidroeléctrico es algebraicamente consistente, pero el repositorio no contiene una especificación física externa con unidades que permita certificar que `PH_t = 2.4525 T_t` y `GH_t = PH_t` sean las conversiones pretendidas. Tampoco modela explícitamente duración de periodo, capacidad térmica, rampas, costo/penalización de vertimiento ni una meta terminal distinta de `V_4 >= 40`.
 
-La primera corrección recomendada fue establecer un contrato numérico de resultados: conservar valores de precisión completa como datos canónicos, usar redondeo solo para presentación y verificar que las variables publicadas, objetivos, LHS y holguras sean coherentes. Esa corrección se implementó en la rama aislada de Fase 2A; los demás hallazgos permanecen abiertos.
+La primera corrección estableció el contrato numérico de resultados en Fase 2A. Fase 2B alinea la implementación y la documentación con la suma ponderada normalizada. Los demás hallazgos permanecen abiertos.
 
 ## 2. Método y límites de la auditoría
 
@@ -145,6 +145,15 @@ python -m streamlit run streamlit_app.py --server.headless true --server.port 85
 
 La corrección de `AUD-CRIT-01` añadió siete casos, elevando la suite a **76 PASS, 0 FAIL, 0 SKIP**, con el mismo warning de caché. El verificador canónico y el oráculo exacto de Benchmark A terminaron en PASS. La salida completa está en `docs/audit_evidence/aud_crit_01_fix_validation.txt`.
 
+### 3.6 Validación POST-FIX de Fase 2B
+
+La corrección de `AUD-HIGH-01` añadió 20 casos recolectados y elevó la suite a
+**96 PASS, 0 FAIL, 0 SKIP**, con el mismo warning de caché. El oráculo exacto de
+la suma ponderada normalizada, el verificador contra producción, el oráculo de
+Benchmark A y el contrato de integridad numérica terminaron en PASS. La salida
+reproducible está en
+`docs/audit_evidence/aud_high_01_weighted_method_validation.txt`.
+
 ## 4. Separación entre validación de software y validación matemática
 
 ### A. Validación de software
@@ -222,12 +231,12 @@ Conclusión: los valores de referencia de los tres casos son correctos para las 
 - La holgura está bien definida para desigualdades. Para igualdad se devuelve el valor absoluto del residuo, magnitud útil pero no una holgura algebraica con signo.
 - Todas las igualdades se marcan activas por construcción si satisfacen tolerancia. Llamarlas automáticamente “cuellos de botella” es una interpretación excesiva.
 - Las cotas implícitas `x >= 0` no aparecen en los resultados de restricciones ni en la lista de activas.
-- El redondeo a seis decimales ocurre en la capa de resultado, no solo en la vista.
+- El redondeo destructivo observado en Fase 1 fue eliminado en Fase 2A; los datos canónicos conservan precisión de punto flotante y la vista formatea copias.
 
 ### 5.4 Interpretación y gráficas
 
-- La interpretación de degeneración depende del peso 0.5, no de una prueba de cara óptima o de soluciones alternativas.
-- `has_alternative_optima` en extremos lexicográficos indica que el desempate mejoró el objetivo secundario respecto del primer punto devuelto. Eso no equivale a detectar toda multiplicidad ni permite concluir unicidad cuando es falso.
+- Fase 2B retiró la inferencia automática de degeneración basada únicamente en el peso 0.5 y la etiqueta de óptimo único basada en ausencia de cambio secundario.
+- El resultado registra selección secundaria y preservación del objetivo primario, pero no intenta certificar unicidad o multiplicidad; esa capacidad sigue pendiente en `AUD-HIGH-02`.
 - La gráfica factible 2D construye el casco de intersecciones factibles finitas. No comprueba rayos de recesión; un conjunto no acotado con varios vértices se sombrea como un polígono cerrado.
 - La gráfica objetivo une puntos no dominados muestreados. Es una aproximación del barrido, no una prueba de la frontera continua; una línea puede sugerir cobertura donde no se resolvieron puntos intermedios.
 
@@ -251,7 +260,7 @@ Conclusión: los valores de referencia de los tres casos son correctos para las 
 | No acotado | Parcial | Estado textual, sin rayo; tests aceptan estado ambiguo. |
 | Holguras | Sí, explícitas | No incluye cotas de variables; igualdad usa residuo absoluto. |
 | Restricciones activas | Parcial | Tolerancia posprocesada y solo restricciones explícitas. |
-| Precisión íntegra | No | Redondeo destructivo a 6 decimales. |
+| Precisión íntegra | Sí desde Fase 2A | Datos canónicos sin redondeo destructivo. |
 | Incumbente no óptimo | No | Se descarta. |
 | Duales / costos reducidos | No expuestos | El adaptador APPSI tiene APIs que el proyecto no usa. |
 
@@ -268,24 +277,25 @@ Z2(x) = c2ᵀx
 
 Cada objetivo conserva su sentido declarado `MAX` o `MIN` en las optimizaciones individuales.
 
-### 7.2 Extremos lexicográficos
+### 7.2 Anclas de la matriz de pagos
 
-Para el extremo de `Z1`, el código ejecuta:
+Para el ancla de `Z1`, el código ejecuta como preprocesamiento:
 
 ```text
 1. optimizar Z1(x) sobre X;
 2. fijar c1ᵀx = Z1*;
-3. optimizar Z2(x) con su propio sentido sobre esa cara óptima.
+3. optimizar Z2(x) con su propio sentido sobre esa cara óptima;
+4. verificar que el valor primario se preservó dentro de la tolerancia numérica.
 ```
 
-Para el extremo de `Z2` intercambia los papeles. Si la igualdad construida con el valor redondeado falla, intenta una banda `Zk* ± tol`.
+Para el ancla de `Z2` intercambia los papeles. La selección secundaria queda registrada en metadatos, no se usa para afirmar unicidad o multiplicidad y no reemplaza ninguna corrida ponderada.
 
 La matriz de pagos efectiva es:
 
 ```text
                  Z1                 Z2
-extremo Z1       Z1(x¹lex)          Z2(x¹lex)
-extremo Z2       Z1(x²lex)          Z2(x²lex)
+ancla Z1         Z1(x¹)             Z2(x¹)
+ancla Z2         Z1(x²)             Z2(x²)
 ```
 
 Los rangos se calculan como el máximo menos el mínimo numérico de esas dos filas:
@@ -295,31 +305,30 @@ R1 = max(Z1a, Z1b) - min(Z1a, Z1b)
 R2 = max(Z2a, Z2b) - min(Z2a, Z2b)
 ```
 
-### 7.3 Función ponderada realmente optimizada
+### 7.3 Función ponderada: PRE-FIX y Fase 2B
 
-Defina `s_k = +1` para un objetivo MAX y `s_k = -1` para uno MIN. En los pesos interiores el código maximiza:
-
-```text
-W_code(x; α1, α2) = α1 · s1 · Z1(x)/R1 + α2 · s2 · Z2(x)/R2
-```
-
-con `x ∈ X` y variables continuas no negativas.
-
-No resta el valor peor ni el nadir. Una utilidad normalizada convencional sería:
+Antes de Fase 2B, para pesos interiores el código maximizaba:
 
 ```text
-MAX: U_k(x) = (Z_k(x) - N_k) / (I_k - N_k)
-MIN: U_k(x) = (N_k - Z_k(x)) / (N_k - I_k)
-W_shifted = α1 U1 + α2 U2
+W_pre(x; α1, α2) = α1 · s1 · Z1(x)/R1 + α2 · s2 · Z2(x)/R2
 ```
 
-Para un par de pesos fijo y rangos no nulos, la omisión del desplazamiento añade únicamente una constante: no cambia el `argmax`, pero sí cambia el valor y la interpretación de `W`. Por eso los puntos encontrados pueden ser correctos mientras `W` no está en `[0,1]` y contradice la fórmula desplazada escrita en `docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`.
+Esa fórmula omitía el origen de la escala. Desde Fase 2B se define:
+
+```text
+MAX: N_k(x) = (Z_k(x) - Zk_min) / (Zk_max - Zk_min)
+MIN: N_k(x) = (Zk_max - Z_k(x)) / (Zk_max - Zk_min)
+W(x) = α1 N1(x) + α2 N2(x)
+resolver MAX W(x), sujeto a x ∈ X
+```
+
+Para un par de pesos fijo y rangos no nulos, el desplazamiento no cambia el `argmax`, pero sí cambia el valor y la interpretación de `N_k` y `W`. La implementación Fase 2B calcula y publica `Z1`, `Z2`, `N1`, `N2` y `W` desde el mismo vector canónico.
 
 ### 7.4 Pesos y casos borde
 
 - Los pesos generados automáticamente suman uno salvo el redondeo decimal esperado.
 - Los pesos personalizados se aceptan si su suma está a menos de `1e-3` de uno. `(0.5004, 0.5004)` fue aceptado y almacenado con suma `1.0008`; no se renormaliza.
-- `(1,0)` y `(0,1)` no ejecutan la suma ponderada: se sustituyen por los extremos lexicográficos ya calculados.
+- Desde Fase 2B, `(1,0)` y `(0,1)` también ejecutan el problema `MAX W`. Si se selecciona un representante eficiente dentro de la misma cara `W*`, se fija y verifica `W*` y se registra la regla en metadatos.
 - Si un rango es menor que `1e-7`, se cancela todo el barrido. Esto evita división por cero, pero también rechaza casos válidos donde un objetivo es constante/redundante y el otro aún puede optimizarse.
 - Las soluciones se deduplican con tolerancia fija `1e-4`, no con el `tol` recibido.
 - La dominancia se evalúa correctamente respecto de los sentidos, pero solo entre los puntos muestreados y deduplicados.
@@ -327,7 +336,7 @@ Para un par de pesos fijo y rangos no nulos, la omisión del desplazamiento aña
 
 ### 7.5 Dictamen sobre el nombre del método
 
-Los pesos interiores sí implementan una **suma ponderada normalizada por rango**. El procedimiento completo no es estrictamente solo el método de ponderaciones: mezcla optimización lexicográfica para la matriz de pagos y los endpoints con suma ponderada para el interior. El desempate lexicográfico puede ser una decisión metodológica válida, pero debe quedar expuesto como tal, separado de la afirmación “óptimo individual puro”, y no debe usarse para afirmar unicidad.
+Desde Fase 2B, el método utilizado para generar alternativas es estrictamente la **suma ponderada normalizada**. La optimización individual y la selección secundaria de representantes son preprocesamiento de la matriz de pagos. Ninguna ancla sustituye una corrida y esos metadatos no se usan para afirmar unicidad.
 
 La API multiobjetivo nativa de Gurobi también distingue objetivos combinados por pesos y prioridades jerárquicas; no son el mismo método. La documentación oficial describe ambos modos por separado: [Gurobi — Multiple Objectives](https://docs.gurobi.com/projects/optimizer/en/current/features/multiobjective.html).
 
@@ -382,19 +391,19 @@ Extremos:
 
 Rangos: `R1=610`, `R2=89`.
 
-| `(α1,α2)` | Punto independiente | `Z1` | `Z2` | `W_code` | Factible |
+| `(α1,α2)` | Punto independiente | `Z1` | `Z2` | `W` normalizado | Factible |
 |---|---:|---:|---:|---:|---|
-| `(0,1)` | `(0,130)` | 390 | 169 | 1.898876 | sí |
-| `(0.2,0.8)` | `(0,130)` | 390 | 169 | 1.646970 | sí |
-| `(0.4,0.6)` | `(80,50)` | 950 | 129 | 1.492614 | sí |
-| `(0.5,0.5)` | `(80,50)` | 950 | 129 | 1.503408 | sí |
-| `(0.6,0.4)` | `(80,50)` | 950 | 129 | 1.514202 | sí |
-| `(0.8,0.2)` | `(80,50)` | 950 | 129 | 1.535789 | sí |
-| `(1,0)` | `(100,0)` | 1000 | 80 | 1.639344 | sí |
+| `(0,1)` | `(0,130)` | 390 | 169 | 1 | sí |
+| `(0.2,0.8)` | `(0,130)` | 390 | 169 | 0.8 | sí |
+| `(0.4,0.6)` | `(80,50)` | 950 | 129 | 0.697550 | sí |
+| `(0.5,0.5)` | `(80,50)` | 950 | 129 | 0.734297 | sí |
+| `(0.6,0.4)` | `(80,50)` | 950 | 129 | 0.771044 | sí |
+| `(0.8,0.2)` | `(80,50)` | 950 | 129 | 0.844539 | sí |
+| `(1,0)` | `(100,0)` | 1000 | 80 | 1 | sí |
 
-La aplicación coincide con esos puntos. Con utilidad desplazada convencional, los valores `W` para las siete filas serían respectivamente `1`, `0.8`, `0.69755`, `0.734297`, `0.771044`, `0.844539`, `1`: las decisiones no cambian, la escala sí.
+La aplicación Fase 2B coincide con esos puntos y valores. Antes de la corrección los `W` publicados eran respectivamente `1.898876`, `1.646970`, `1.492614`, `1.503408`, `1.514202`, `1.535789`, `1.639344`: las decisiones coincidían en este benchmark, pero la escala contradecía la normalización declarada.
 
-Para `(0.5,0.5)`, los valores escalares en los vértices muestran que `(80,50)` es el único óptimo entre ellos y, por linealidad, el único vértice óptimo; no existe una arista óptima paralela. Aun así, la interpretación actual afirma degeneración solo por observar `α1=0.5`.
+Para `(0.5,0.5)`, los valores escalares en los vértices muestran que `(80,50)` es el único óptimo entre ellos y, por linealidad, no existe una arista óptima paralela. La afirmación automática de degeneración por observar `α1=0.5` fue retirada en Fase 2B; la capacidad general de probar unicidad o multiplicidad sigue pendiente en `AUD-HIGH-02`.
 
 ### 8.3 Modelo hidroeléctrico
 
@@ -622,11 +631,11 @@ HiGHS se presenta oficialmente como software para LP, MIP y QP a gran escala: [H
 - **Severidad:** CRÍTICO
 - **Archivo:** `src/solver_optimizador/lp_solver.py:96-121`; `src/solver_optimizador/multiobjective.py:128-129,335-338`
 - **Función/líneas:** `solve_lp()`, `solve_lexicographic_extreme()`, barrido ponderado.
-- **Comportamiento actual:** variables, objetivo, LHS y holguras se redondean independientemente a seis decimales; en multiobjetivo se evalúan objetivos sobre variables ya redondeadas.
+- **Comportamiento observado en Fase 1 (PRE-FIX):** variables, objetivo, LHS y holguras se redondeaban independientemente a seis decimales; en multiobjetivo se evaluaban objetivos sobre variables ya redondeadas.
 - **Problema detectado:** el objeto devuelto no conserva una única solución numérica coherente.
 - **Por qué es problemático:** rompe trazabilidad, reproducción, verificación de factibilidad y cualquier cálculo posterior; el error puede crecer con coeficientes grandes.
 - **Ejemplo reproducible:** `max 1e9·x`, sujeto a `1e9·x = 1`, `x>=0`.
-- **Resultado actual:** `x=0.0`, `Z=1.0`, `LHS=1.0`; al reevaluar con el `x` publicado se obtiene `Z=0`, `LHS=0`.
+- **Resultado PRE-FIX:** `x=0.0`, `Z=1.0`, `LHS=1.0`; al reevaluar con el `x` publicado se obtiene `Z=0`, `LHS=0`.
 - **Resultado esperado:** conservar `x≈1e-9` canónico; objetivo, LHS y holgura deben derivarse del mismo vector. Redondear únicamente en la vista.
 - **Recomendación:** contrato de precisión completa, tolerancias explícitas, serialización segura y verificación de residuo antes de emitir `optimal`.
 - **Tests a agregar/modificar:** escalas `1e-12..1e12`, reconstrucción `Z(x)`/`Ax`, factibilidad del resultado serializado y comparación UI sin alterar el dato base.
@@ -650,25 +659,44 @@ Ningún otro hallazgo de esta auditoría se marca como corregido en Fase 2A.
 - **Severidad:** ALTO
 - **Archivo:** `src/solver_optimizador/multiobjective.py:36-149,153-345`; `docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`; textos de UI/README.
 - **Función/líneas:** extremos lexicográficos y `solve_biobjective_weighted()`.
-- **Comportamiento actual:** extremos/endpoints lexicográficos; pesos interiores con suma ponderada por rangos sin desplazamiento.
+- **Comportamiento observado en Fase 1 (PRE-FIX):** extremos/endpoints lexicográficos; pesos interiores con suma ponderada por rangos sin desplazamiento.
 - **Problema detectado:** se presenta el conjunto como método de ponderaciones; una documentación usa utilidad desplazada que el código no calcula.
 - **Por qué es problemático:** confunde dos métodos y hace que `W` tenga una escala distinta de la explicada, aunque los puntos interiores puedan coincidir.
 - **Ejemplo reproducible:** Benchmark A; `W_code(0,1)=169/89=1.898876`, mientras la utilidad desplazada da `1`.
-- **Resultado actual:** mismas decisiones, valores `W` fuera de `[0,1]`; endpoints escogidos con prioridad secundaria.
+- **Resultado PRE-FIX:** mismas decisiones, valores `W` fuera de `[0,1]`; endpoints escogidos con prioridad secundaria.
 - **Resultado esperado:** definir y nombrar separadamente optimización individual, desempate lexicográfico y suma ponderada; una sola fórmula de `W` en código, UI y docs.
 - **Recomendación:** no cambiar números hasta fijar la especificación matemática; después separar servicios/métodos y versionar el significado de `W`.
 - **Tests a agregar/modificar:** fórmula simbólica/numeral de `W`, MAX/MIN mixtos, endpoints con múltiples óptimos y comparación lexicográfico vs ponderado puro.
 
+**Estado: CORREGIDO EN FASE 2B.**
+
+- **Rama:** `codex/fix-aud-high-01-weighted-method`.
+- **Commit:** commit único de Fase 2B; su SHA se obtiene con `git rev-parse HEAD` y se informa al publicar. No se inserta el propio SHA dentro del commit para evitar una referencia circular.
+- **Fórmula anterior:** `W_pre=α1·s1·Z1/ΔZ1 + α2·s2·Z2/ΔZ2`, sin origen de escala; además los endpoints se copiaban desde las anclas.
+- **Fórmula nueva:** para MAX, `Nk=(Zk-Zk_min)/ΔZk`; para MIN, `Nk=(Zk_max-Zk)/ΔZk`; todas las corridas resuelven `MAX W=α1N1+α2N2` sobre la región factible original.
+- **Separación conceptual:** `_build_payoff_anchor()` selecciona representantes únicamente para construir la matriz de pagos. `solve_lexicographic_extreme()` se conserva como alias histórico de compatibilidad y no participa como sustituto del barrido.
+- **Endpoints:** `(1,0)` y `(0,1)` pasan por HiGHS como funciones ponderadas. Una selección posterior, cuando aplica, conserva `W*` y queda registrada en `selection_metadata` sin afirmar unicidad.
+- **Benchmark A:** reproduce las seis ponderaciones académicas y `(0.5,0.5)`; `N1=(Z1-390)/610`, `N2=(Z2-80)/89`.
+- **Caso MAX/MIN:** se añadió prueba de orientación de MIN y un problema sencillo con óptimo ponderado único.
+- **Hidroeléctrico:** usa `N1=(21416.25-Z1)/14715`, `N2=(Z2-40)/60`; los pesos `0.2/0.8` y `0.4/0.6` favorecen reserva, `0.6/0.4` y `0.8/0.2` favorecen costo, y `0.5/0.5` verifica factibilidad, frontera y `W≈0.5` sin exigir un vector.
+- **Tests:** `tests/test_weighted_method.py` más ajustes explícitos a pruebas que dependían de la fórmula o interpretación anterior.
+- **Oráculo independiente:** `tools/audit/verify_weighted_method_exact.py`, biblioteca estándar y `Fraction`, sin importar producción ni solver.
+- **Evidencia:** `docs/audit_evidence/aud_high_01_weighted_method_validation.txt`.
+
+`AUD-HIGH-02` permanece abierto: Fase 2B elimina inferencias falsas basadas solo en el peso y etiquetas de “óptimo único”, pero no implementa un certificado general de unicidad o multiplicidad.
+
 ### AUD-HIGH-02 — Degeneración y unicidad afirmadas sin prueba
+
+**Estado: ABIERTO.** Fase 2B retiró las dos afirmaciones automáticas falsas que interferían con la presentación del método, pero no añadió un algoritmo general para demostrar degeneración, unicidad o multiplicidad.
 
 - **Severidad:** ALTO
 - **Archivo:** `src/solver_optimizador/interpretation.py:149-154`; `src/solver_optimizador/multiobjective.py:133-149`; `streamlit_app.py` presentación de multiplicidad.
 - **Función/líneas:** interpretación biobjetivo y `has_alternative_optima`.
-- **Comportamiento actual:** una ejecución única con `alpha1=0.5` se etiqueta degenerada; ausencia de mejora secundaria se muestra como óptimo único.
+- **Comportamiento observado en Fase 1:** una ejecución única con `alpha1=0.5` se etiquetaba degenerada; ausencia de mejora secundaria se mostraba como óptimo único. Esas etiquetas automáticas se retiraron en Fase 2B, pero todavía no existe una prueba general que certifique unicidad o multiplicidad.
 - **Problema detectado:** el peso no prueba degeneración y el algoritmo no prueba unicidad global.
 - **Por qué es problemático:** entrega una conclusión matemática falsa al usuario.
 - **Ejemplo reproducible:** Benchmark A con `(0.5,0.5)` tiene óptimo único `(80,50)`, pero `claims_degeneracy=true`.
-- **Resultado actual:** falso positivo de degeneración; posibles falsos negativos de multiplicidad.
+- **Resultado observado en Fase 1:** falso positivo de degeneración; posibles falsos negativos de multiplicidad.
 - **Resultado esperado:** “no evaluado” salvo que se ejecute una prueba de cara óptima/variación por variable o se obtenga certificado equivalente.
 - **Recomendación:** separar “se encontró alternativa” de “se demostró unicidad”; quitar inferencia por peso.
 - **Tests a agregar/modificar:** caso 0.5 único, caso 0.5 degenerado hidroeléctrico y extremos con cara óptima.
@@ -1047,7 +1075,7 @@ python -c "from pyomo.opt import SolverFactory; names=['appsi_highs','highs','gu
 
 ### 18.2 Oráculo exacto versionado de Benchmark A
 
-El archivo `tools/audit/verify_benchmark_a_exact.py` no importa `solver_optimizador`, builders ni solvers. Enumera intersecciones, filtra factibilidad y evalúa objetivos y las siete ponderaciones requeridas con `fractions.Fraction`.
+El archivo `tools/audit/verify_benchmark_a_exact.py` no importa `solver_optimizador`, builders ni solvers. Enumera intersecciones, filtra factibilidad y evalúa objetivos y las siete ponderaciones requeridas con `fractions.Fraction`. Se conserva deliberadamente su valor `W` *legacy* de Fase 1B para que la evidencia histórica siga siendo reproducible; la ecuación normativa corregida y sus valores exactos se verifican por separado en la sección 18.4.
 
 ```powershell
 python tools/audit/verify_benchmark_a_exact.py
@@ -1077,7 +1105,28 @@ RESULT: PASS (numeric integrity contract satisfied)
 
 La salida POST-FIX se preserva en `docs/audit_evidence/aud_crit_01_fix_validation.txt`.
 
-### 18.4 Segunda formulación hidroeléctrica indexada
+### 18.4 Oráculo exacto de suma ponderada normalizada
+
+`tools/audit/verify_weighted_method_exact.py` usa únicamente biblioteca estándar
+y `fractions.Fraction`; no importa producción, Pyomo ni HiGHS. Enumera los
+vértices de Benchmark A y verifica `Z1`, `Z2`, `N1`, `N2`, `W`, los seis pesos
+académicos y `(0.5,0.5)`.
+
+```powershell
+python tools/audit/verify_weighted_method_exact.py
+```
+
+Debe terminar con:
+
+```text
+RESULT: PASS (pure normalized weighted-sum oracle satisfied)
+```
+
+`tools/audit/verify_weighted_method_production.py` contrasta el mismo contrato
+con el código bajo prueba y añade el caso hidroeléctrico. No se etiqueta como
+oráculo independiente.
+
+### 18.5 Segunda formulación hidroeléctrica indexada
 
 Modelo AMPL utilizado conceptualmente, separado de las 28 filas del fixture:
 
@@ -1116,7 +1165,7 @@ param initial_volume := 0;
 
 En la ejecución temporal de Fase 1 se registró `solve_result=solved`, `Z=6701.249999999997`, `sum(T)=95` y residuo máximo de igualdad `1.42e-14`. Como el script y stdout originales no fueron preservados, esa cifra se mantiene solo como observación histórica no reproducible, no como evidencia independiente suficiente. La demostración algebraica de la sección 8.3 sí está versionada; automatizar la formulación cruzada queda pendiente para el benchmark formal de Fase 3.
 
-### 18.5 Casos adversariales mínimos
+### 18.6 Casos adversariales mínimos
 
 ```text
 Precisión:       max 1e9*x; 1e9*x = 1; x >= 0
@@ -1131,4 +1180,8 @@ El caso de precisión se convirtió en prueba permanente en Fase 2A. Los demás 
 
 ---
 
-**Estado de Fase 2A:** `AUD-CRIT-01` corregido y validado en `codex/fix-aud-crit-01-numeric-integrity`. La auditoría Fase 1B sí fue integrada en `main`; la corrección Fase 2A permanece únicamente en su rama hasta revisión externa.
+**Estado de Fase 2B:** `AUD-CRIT-01` permanece corregido en `main` y
+`AUD-HIGH-01` está corregido y validado en
+`codex/fix-aud-high-01-weighted-method`. Fase 2B permanece únicamente en su rama
+hasta revisión externa. `AUD-HIGH-02` y los demás hallazgos no abordados siguen
+abiertos.

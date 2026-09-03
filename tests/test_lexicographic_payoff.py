@@ -60,7 +60,10 @@ def test_hydroelectric_z2_tie_break_gives_21416_25():
     assert res_z2["primary_optimal_value"] == pytest.approx(100.0, abs=1e-4)
     assert res_z2["Z2"] == pytest.approx(100.0, abs=1e-4)
     assert res_z2["Z1"] == pytest.approx(21416.25, abs=1e-2)
-    assert res_z2["has_alternative_optima"] is True
+    metadata = res_z2["selection_metadata"]
+    assert metadata["applied"] is True
+    assert metadata["primary_value_preserved"] is True
+    assert metadata["establishes_uniqueness"] is False
 
 
 def test_hydroelectric_z1_extreme():
@@ -175,7 +178,9 @@ def test_hydroelectric_single_weight_half_half():
     assert 40.0 <= r["Z2"] <= 100.0
 
     bullets = interpret_biobjective_solution(problem, sol)
-    assert any("degeneración de la función ponderada" in b or "múltiples soluciones óptimas" in b for b in bullets)
+    full_text = " ".join(bullets).lower()
+    assert "existe degeneración" not in full_text
+    assert "óptimo único" not in full_text
 
 
 # ---------------------------------------------------------------------------
@@ -286,16 +291,18 @@ def test_synthetic_flat_face_min_min():
 
 
 # ---------------------------------------------------------------------------
-# 7. Interpretacion de Extremos Lexicograficos
+# 7. Interpretacion de Anclas de la Matriz de Pagos
 # ---------------------------------------------------------------------------
-def test_interpretation_lexicographic_notes():
+def test_interpretation_payoff_anchor_notes():
     """
-    Verifica que la interpretacion reporte la construccion de extremos lexicograficos
-    y el desempate especifico para Z2 en el problema hidroelectrico.
+    Verifica que la seleccion secundaria se presente solo como preprocesamiento
+    y no produzca afirmaciones de unicidad o multiplicidad.
     """
     problem = _get_hydroelectric_problem()
     sol = solve_biobjective_weighted(problem, num_combinations=6)
     bullets = interpret_biobjective_solution(problem, sol)
 
-    assert any("extremos lexicográficamente eficientes" in b for b in bullets)
-    assert any("Z_2" in b and "criterio secundario de desempate" in b for b in bullets)
+    full_text = " ".join(bullets)
+    assert "anclas de normalizacion" in full_text
+    assert "criterio secundario" in full_text
+    assert "no demuestra unicidad" in full_text

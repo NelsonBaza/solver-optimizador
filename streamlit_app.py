@@ -424,9 +424,14 @@ with st.sidebar:
         st.markdown(
             """
             * **Ponderaciones:** Combina los dos objetivos mediante pesos $(\\alpha_1, \\alpha_2)$ donde $\\alpha_1 + \\alpha_2 = 1$.
-            * **Normalizacion por Rangos:** Utiliza la matriz de pagos:
+            * **Matriz de pagos:** Los optimos individuales definen las anclas y rangos:
               $$\\Delta Z_k = Z_{k,\\max} - Z_{k,\\min}$$
-              $$W = \\alpha_1 \\frac{\\pm Z_1}{\\Delta Z_1} + \\alpha_2 \\frac{\\pm Z_2}{\\Delta Z_2}$$
+            * **Normalizacion orientada al beneficio:**
+              $$N_k = \\frac{Z_k-Z_{k,\\min}}{\\Delta Z_k}\\quad(\\mathrm{MAX}),\\qquad
+              N_k = \\frac{Z_{k,\\max}-Z_k}{\\Delta Z_k}\\quad(\\mathrm{MIN})$$
+            * **Suma ponderada normalizada:** Cada peso resuelve
+              $$\\max\\; W = \\alpha_1 N_1 + \\alpha_2 N_2$$
+              sujeto a todas las restricciones originales, incluidos los pesos extremos $(1,0)$ y $(0,1)$.
             * **Rigor:** Las soluciones corresponden a las ponderaciones evaluadas y no necesariamente representan toda la frontera de Pareto continua.
             """
         )
@@ -1011,15 +1016,15 @@ with tab_res:
                     col_pm, col_rng = st.columns([1.2, 1.0])
                     with col_pm:
                         with st.container(border=True):
-                            st.subheader("Matriz de Pagos (Extremos Lexicograficos)")
+                            st.subheader("Matriz de Pagos y Anclas de Normalizacion")
                             pm1 = sol.payoff_matrix.get("opt_Z1", {})
                             pm2 = sol.payoff_matrix.get("opt_Z2", {})
                             lbl1 = f"Extremo Z1 ({prob.objective1.sense.value.upper()})"
-                            if pm1.get("has_tie_break"):
-                                lbl1 += " [Desempate aplicado]"
+                            if pm1.get("selection_metadata", {}).get("applied"):
+                                lbl1 += " [Representante eficiente seleccionado]"
                             lbl2 = f"Extremo Z2 ({prob.objective2.sense.value.upper()})"
-                            if pm2.get("has_tie_break"):
-                                lbl2 += " [Desempate aplicado]"
+                            if pm2.get("selection_metadata", {}).get("applied"):
+                                lbl2 += " [Representante eficiente seleccionado]"
                             pm_data = [
                                 {
                                     "Extremo": lbl1,
@@ -1124,6 +1129,8 @@ with tab_res:
                             row_dict[v] = r["x"].get(v, None) if r["x"] else None
                         row_dict["Z1"] = r["Z1"]
                         row_dict["Z2"] = r["Z2"]
+                        row_dict["N1"] = r["N1"]
+                        row_dict["N2"] = r["N2"]
                         row_dict["W"] = r["W"]
                         row_dict["Estado"] = r["status"]
                         runs_data.append(row_dict)
@@ -1134,6 +1141,8 @@ with tab_res:
                         "alpha2": st.column_config.NumberColumn(format="%.2f"),
                         "Z1": st.column_config.NumberColumn(format="%.6g"),
                         "Z2": st.column_config.NumberColumn(format="%.6g"),
+                        "N1": st.column_config.NumberColumn(format="%.6g"),
+                        "N2": st.column_config.NumberColumn(format="%.6g"),
                         "W": st.column_config.NumberColumn(format="%.6g"),
                     }
                     for v in prob.variables:
@@ -1175,20 +1184,25 @@ with tab_res:
                 # Subtab 5: Diagnostico
                 with subtab_diag:
                     with st.container(border=True):
-                        st.subheader("🔍 Detalle de Extremos y Desempate Lexicografico")
+                        st.subheader("🔍 Detalle de Anclas de la Matriz de Pagos")
                         for k, name, s_obj in [("Z1_opt", "Z1", prob.objective1), ("Z2_opt", "Z2", prob.objective2)]:
                             opt_data = sol.individual_optima.get(k, {})
                             if isinstance(opt_data, dict):
-                                has_tb = opt_data.get("has_alternative_optima", False)
+                                selection = opt_data.get("selection_metadata", {})
                                 prim_val = opt_data.get("primary_optimal_value")
                                 z1_val = opt_data.get("Z1")
                                 z2_val = opt_data.get("Z2")
                                 st.markdown(f"**Extremo para {name} ({s_obj.sense.value.upper()}):**")
                                 st.markdown(
                                     f"- Óptimo principal aislado: `{_format_result_value(prim_val)}`\n"
-                                    f"- Desempate lexicográfico aplicado: `{'✅ Sí (múltiples óptimos detectados)' if has_tb else 'ℹ️ No requerido (óptimo único)'}`\n"
+                                    f"- Selección secundaria de representante: `{'Aplicada' if selection.get('applied') else 'No aplicada'}`\n"
+                                    f"- Valor primario preservado: `{'Sí' if selection.get('primary_value_preserved') else 'No verificado'}`\n"
                                     f"- Punto eficiente resultante: $Z_1 = {_format_result_value(z1_val)}, \\quad Z_2 = {_format_result_value(z2_val)}$"
                                 )
+                        st.caption(
+                            "La selección de representantes pertenece al preprocesamiento de la matriz de pagos. "
+                            "No sustituye las corridas ponderadas ni demuestra unicidad o multiplicidad."
+                        )
                     with st.container(border=True):
                         st.subheader("⏱️ Tiempos de Resolucion (Pyomo + HiGHS)")
                         st.json(sol.timing)

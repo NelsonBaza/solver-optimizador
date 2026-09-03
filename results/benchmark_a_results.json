@@ -5,7 +5,9 @@
     "python_version": "3.13.1 (tags/v3.13.1:0671451, Dec  3 2024, 19:06:28) [MSC v.1942 64 bit (AMD64)]",
     "amplpy_version": "0.18.0",
     "solver": "HiGHS (1.15.1)",
-    "problem_type": "Biobjective Continuous LP"
+    "problem_type": "Biobjective Continuous LP",
+    "artifact_status": "historical_pre_phase2b",
+    "weighted_value_definition": "legacy_unshifted_objectives_divided_by_ranges"
   },
   "individual_optima": {
     "Z1_max": {

@@ -112,7 +112,7 @@ def unique_maximizer(
 
 
 def weighted_value(point: tuple[F, F], alpha1: F, alpha2: F) -> F:
-    """Función W efectiva documentada para Benchmark A en producción."""
+    """Valor legacy de Fase 1B, preservado para reproducibilidad histórica."""
 
     return alpha1 * z1(point) / F(610) + alpha2 * z2(point) / F(89)
 

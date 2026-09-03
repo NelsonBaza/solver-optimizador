@@ -62,18 +62,23 @@ Z_2^{\text{range}} &= Z_2^{\max} - Z_2^{\min} = 169.0 - 80.0 = 89.0
 ## 3. Etapa 2: Método de Suma Ponderada Normalizada
 
 Se formuló la función objetivo agregada normalizada:
-$$\max W = \alpha_1 \frac{10 x_1 + 3 x_2}{610.0} + \alpha_2 \frac{0.8 x_1 + 1.3 x_2}{89.0} \quad \text{con } \alpha_1 + \alpha_2 = 1, \; \alpha_k \ge 0$$
+$$N_1=\frac{Z_1-390}{610},\qquad N_2=\frac{Z_2-80}{89}$$
+$$\max W = \alpha_1N_1+\alpha_2N_2 \quad \text{con } \alpha_1 + \alpha_2 = 1, \; \alpha_k \ge 0$$
 
 ### Barrido de Ponderaciones (6 Combinaciones):
 
 | Ejecución | $\alpha_1$ | $\alpha_2$ | $x_1$ | $x_2$ | $Z_1$ Original | $Z_2$ Original | Valor Agregado $W$ | Estado Solver |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1** | $0.0$ | $1.0$ | $0.0$ | $130.0$ | $390.0$ | $169.0$ | $1.8989$ | `solved` |
-| **2** | $0.2$ | $0.8$ | $0.0$ | $130.0$ | $390.0$ | $169.0$ | $1.6470$ | `solved` |
-| **3** | $0.4$ | $0.6$ | $80.0$ | $50.0$ | $950.0$ | $129.0$ | $1.4926$ | `solved` |
-| **4** | $0.6$ | $0.4$ | $80.0$ | $50.0$ | $950.0$ | $129.0$ | $1.5142$ | `solved` |
-| **5** | $0.8$ | $0.2$ | $80.0$ | $50.0$ | $950.0$ | $129.0$ | $1.5358$ | `solved` |
-| **6** | $1.0$ | $0.0$ | $100.0$ | $0.0$ | $1000.0$ | $80.0$ | $1.6393$ | `solved` |
+| **1** | $0.0$ | $1.0$ | $0.0$ | $130.0$ | $390.0$ | $169.0$ | $1.0000$ | `solved` |
+| **2** | $0.2$ | $0.8$ | $0.0$ | $130.0$ | $390.0$ | $169.0$ | $0.8000$ | `solved` |
+| **3** | $0.4$ | $0.6$ | $80.0$ | $50.0$ | $950.0$ | $129.0$ | $0.6976$ | `solved` |
+| **4** | $0.6$ | $0.4$ | $80.0$ | $50.0$ | $950.0$ | $129.0$ | $0.7710$ | `solved` |
+| **5** | $0.8$ | $0.2$ | $80.0$ | $50.0$ | $950.0$ | $129.0$ | $0.8445$ | `solved` |
+| **6** | $1.0$ | $0.0$ | $100.0$ | $0.0$ | $1000.0$ | $80.0$ | $1.0000$ | `solved` |
+
+Los JSON de `results/` fueron generados antes de Fase 2B y se conservan como
+artefactos históricos con su definición legacy identificada en metadatos. La
+referencia vigente y reproducible está en `tools/audit/verify_weighted_method_exact.py`.
 
 ---
 

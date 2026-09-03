@@ -170,10 +170,10 @@ def run_benchmark_a_pyomo() -> Dict[str, Any]:
 
     for i, (a1, a2) in enumerate(weights_list):
         mw = _build_base_model()
-        # W = a1 * Z1(x)/Z1_range + a2 * Z2(x)/Z2_range
+        # W = a1*N1 + a2*N2, con Nk=(Zk-Zk_min)/Zk_range para MAX.
         mw.obj = pyo.Objective(
-            expr=a1 * (10 * mw.x1 + 3 * mw.x2) / z1_range
-               + a2 * (0.8 * mw.x1 + 1.3 * mw.x2) / z2_range,
+            expr=a1 * ((10 * mw.x1 + 3 * mw.x2) - z1_min) / z1_range
+               + a2 * ((0.8 * mw.x1 + 1.3 * mw.x2) - z2_min) / z2_range,
             sense=pyo.maximize,
         )
         res_w = solver.solve(mw)
@@ -182,6 +182,8 @@ def run_benchmark_a_pyomo() -> Dict[str, Any]:
         x2_val = float(pyo.value(mw.x2))
         z1_val = 10.0 * x1_val + 3.0 * x2_val
         z2_val = 0.8 * x1_val + 1.3 * x2_val
+        n1_val = (z1_val - z1_min) / z1_range
+        n2_val = (z2_val - z2_min) / z2_range
         w_val = float(pyo.value(mw.obj.expr))
         term_str = str(res_w.termination_condition)
 
@@ -189,11 +191,13 @@ def run_benchmark_a_pyomo() -> Dict[str, Any]:
             "run_index": i + 1,
             "alpha1": a1,
             "alpha2": a2,
-            "x1": round(x1_val, 4),
-            "x2": round(x2_val, 4),
-            "Z1": round(z1_val, 4),
-            "Z2": round(z2_val, 4),
-            "W": round(w_val, 6),
+            "x1": x1_val,
+            "x2": x2_val,
+            "Z1": z1_val,
+            "Z2": z2_val,
+            "N1": n1_val,
+            "N2": n2_val,
+            "W": w_val,
             "solve_result": term_str,
         }
         weighted_runs.append(run_data)

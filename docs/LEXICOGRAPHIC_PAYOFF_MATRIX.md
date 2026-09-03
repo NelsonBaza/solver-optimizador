@@ -1,5 +1,14 @@
 # Desempate Lexicográfico y Matriz de Pagos Eficiente en Optimización Biobjetivo
 
+> [!IMPORTANT]
+> **Documento histórico.** Describe la motivación del mecanismo secundario que
+> selecciona representantes para las anclas de la matriz de pagos. Desde Fase
+> 2B, la especificación normativa del método que genera alternativas es
+> [`METODO_PONDERACIONES.md`](METODO_PONDERACIONES.md): todas las corridas,
+> incluidos los pesos extremos, resuelven la suma ponderada normalizada. Este
+> documento no debe interpretarse como definición de un método híbrido ni como
+> prueba general de unicidad o multiplicidad.
+
 **Fecha:** 24 de agosto de 2026  
 **Módulos:** `src/solver_optimizador/multiobjective.py`, `src/solver_optimizador/interpretation.py`, `streamlit_app.py`
 
@@ -21,9 +30,13 @@ Incluir un extremo dominado en la matriz de pagos:
 
 ---
 
-## 2. Solución: Algoritmo de Desempate Lexicográfico
+## 2. Regla histórica de selección secundaria de anclas
 
-Para garantizar que los puntos utilizados en la matriz de pagos sean **estrictamente Pareto-eficientes**, se implementa una optimización lexicográfica (por prioridades) en dos etapas para cada objetivo.
+Para evitar escoger un representante débilmente dominado en el caso documentado,
+se implementó una selección secundaria en dos etapas para cada ancla. En el
+flujo vigente se trata exclusivamente como preprocesamiento de la matriz de
+pagos: no genera alternativas ponderadas y no demuestra por sí sola que un
+óptimo individual sea único o múltiple.
 
 ### Procedimiento para el Extremo $Z_1$:
 1. **Paso Primario:** Resolver $\text{Opt } Z_1$ sujeto a las restricciones originales del problema $\rightarrow Z_1^*$.
@@ -77,5 +90,11 @@ produce los siguientes resultados rigurosos:
 | **0.8** | **0.2** | $6701.25$ | $40.0$ | No dominada |
 | **1.0** | **0.0** | $6701.25$ | $40.0$ | No dominada |
 
-### Caso Especial $\alpha = (0.50, 0.50)$:
-Debido a que la tasa de sustitución marginal entre $Z_1$ y $Z_2$ es constante a lo largo de la frontera ($\frac{\Delta Z_1}{\Delta Z_2} = \frac{14715}{60} = 245.25$), con pesos iguales $\alpha_1 = \alpha_2 = 0.5$ la función objetivo ponderada es exactamente paralela al segmento que conecta ambos vértices eficientes. Existe **degeneración de la función ponderada** y cualquier punto del segmento continuo es igualmente óptimo. El sistema reporta esta condición explícitamente en la interpretación de resultados.
+### Caso particular documentado $\alpha = (0.50, 0.50)$
+
+Para este modelo hidroeléctrico concreto, la relación documentada
+$Z_1=245.25Z_2-3108.75$ implica que $W=0.5$ sobre la frontera eficiente. Esta
+conclusión procede de la ecuación del caso, no del mero hecho de usar pesos
+iguales. La aplicación vigente no presenta una afirmación general de
+degeneración o unicidad; ese diagnóstico formal permanece abierto en
+`AUD-HIGH-02`.

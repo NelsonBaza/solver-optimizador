@@ -144,6 +144,5 @@ def test_weighted_run_objectives_and_w_use_the_published_vector() -> None:
     assert run["Z2"] == pytest.approx(reconstructed_z2, rel=1e-12, abs=1e-12)
 
     ranges = solution.normalization_ranges
-    reconstructed_w = 0.75 * reconstructed_z1 / ranges["Z1_range"]
-    reconstructed_w += 0.25 * reconstructed_z2 / ranges["Z2_range"]
+    reconstructed_w = 0.75 * run["N1"] + 0.25 * run["N2"]
     assert run["W"] == pytest.approx(reconstructed_w, rel=1e-12, abs=1e-12)

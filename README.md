@@ -28,10 +28,10 @@ La aplicación se abrirá automáticamente en su navegador en:
   * Gráfico 2D de la región factible y vértice óptimo (cuando $n_{\text{vars}} = 2$).
 * **Programación Lineal Biobjetivo (LP):**
   * Definición de dos funciones objetivo lineales ($Z_1, Z_2$) con sentidos independientes (Max/Min).
-  * Optimización individual con **desempate lexicográfico** para garantizar extremos Pareto-eficientes en caso de múltiples óptimos.
-  * Construcción de la **matriz de pagos eficiente** libre de soluciones dominadas.
+  * Optimización individual y construcción separada de la **matriz de pagos**. Puede seleccionarse un representante eficiente con el óptimo primario fijado; esta regla de anclaje no sustituye ninguna corrida ponderada ni demuestra unicidad.
   * Cálculo dinámico de **rangos de normalización** ($\Delta Z_k = Z_{k,\max} - Z_{k,\min}$).
-  * Método de **ponderaciones normalizadas** ($W = \alpha_1 \frac{\pm Z_1}{\Delta Z_1} + \alpha_2 \frac{\pm Z_2}{\Delta Z_2}$).
+  * Método de **ponderaciones normalizadas**: para MAX, $N_k=(Z_k-Z_{k,\min})/\Delta Z_k$; para MIN, $N_k=(Z_{k,\max}-Z_k)/\Delta Z_k$; cada alternativa resuelve $\max W=\alpha_1N_1+\alpha_2N_2$.
+  * Los pesos extremos $(1,0)$ y $(0,1)$ también se resuelven como problemas ponderados; no se sustituyen por filas de la matriz de pagos.
   * Modalidades: **Barrido uniforme automático** ($N$ combinaciones) o **Ponderación única personalizada**.
   * Detección de soluciones repetidas y clasificación de **no dominancia de Pareto** sobre el conjunto discreto.
   * Gráficos interactivos: espacio de objetivos ($Z_1$ vs. $Z_2$) y región factible 2D.
@@ -91,7 +91,8 @@ Para ejecutar la suite de pruebas del motor matemático:
 
 * [`docs/STATUS.md`](docs/STATUS.md): Fotografía técnica del estado actual del proyecto.
 * [`docs/DECISIONS.md`](docs/DECISIONS.md): Registro histórico de decisiones arquitectónicas (ADR-001 a ADR-007).
-* [`docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`](docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md): Desempate lexicográfico y construcción de matriz de pagos eficiente.
+* [`docs/METODO_PONDERACIONES.md`](docs/METODO_PONDERACIONES.md): Especificación matemática normativa de la suma ponderada normalizada.
+* [`docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`](docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md): Documento histórico sobre la selección secundaria de anclas; no define el método vigente.
 * [`docs/END_TO_END_JSON_STREAMLIT_SOLVER_AUDIT.md`](docs/END_TO_END_JSON_STREAMLIT_SOLVER_AUDIT.md): Auditoría de sincronización de modelos entre UI y solver.
 * [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](docs/BENCHMARK_A_BACKEND_COMPARISON.md): Comparativa exhaustiva Pyomo vs. AMPL.
 * [`docs/PERSISTENCE_CONSTRAINT_NORMALIZATION_FIX.md`](docs/PERSISTENCE_CONSTRAINT_NORMALIZATION_FIX.md): Normalización canónica de restricciones y corrección de persistencia JSON.

@@ -85,7 +85,6 @@ def test_streamlit_app_apptest_solve_mono_example():
     solve_buttons[0].click().run()
     assert not at.exception
 
-
 def test_streamlit_app_apptest_solve_bio_benchmark_a():
     """
     Carga Benchmark A (Biobjetivo) y ejecuta la resolucion mediante AppTest.
@@ -106,3 +105,15 @@ def test_streamlit_app_apptest_solve_bio_benchmark_a():
     assert not solve_buttons[0].disabled
     solve_buttons[0].click().run()
     assert not at.exception
+
+    solution = at.session_state.last_solution
+    assert solution is not None
+    assert all({"N1", "N2", "W"}.issubset(run) for run in solution.weighted_runs)
+    sweep_tables = [
+        element.value
+        for element in at.dataframe
+        if {"alpha1", "alpha2", "Z1", "Z2", "N1", "N2", "W", "Estado"}.issubset(
+            element.value.columns
+        )
+    ]
+    assert len(sweep_tables) == 1

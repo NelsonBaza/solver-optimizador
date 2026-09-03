@@ -135,19 +135,25 @@ def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: Multio
                 "Ambos objetivos alcanzan simultaneamente su optimo individual en la misma solucion, por lo que no se observa conflicto directo entre ellos en los optimos individuales."
             )
 
-        # Nota de construccion lexicografica
-        bullets.append("La matriz de pagos se construyó utilizando extremos lexicográficamente eficientes.")
+        bullets.append(
+            "La matriz de pagos y las anclas de normalizacion se construyeron "
+            "antes del barrido. La seleccion secundaria de un representante, "
+            "cuando se aplico, conservo el optimo individual primario y no "
+            "constituye un metodo alternativo a la suma ponderada."
+        )
 
-        if pm.get("opt_Z1", {}).get("has_tie_break"):
-            bullets.append(
-                f"El objetivo $Z_1$ presentó múltiples soluciones con el mismo óptimo individual ($Z_1^* = {z1_opt:.2f}$). "
-                f"Se utilizó $Z_2$ ({s2.value.upper()}) como criterio secundario de desempate para seleccionar el extremo eficiente."
-            )
-        if pm.get("opt_Z2", {}).get("has_tie_break"):
-            bullets.append(
-                f"El objetivo $Z_2$ presentó múltiples soluciones con el mismo óptimo individual ($Z_2^* = {z2_opt:.2f}$). "
-                f"Se utilizó $Z_1$ ({s1.value.upper()}) como criterio secundario de desempate para seleccionar el extremo eficiente."
-            )
+        for key, primary_name, secondary_name in (
+            ("opt_Z1", "Z_1", "Z_2"),
+            ("opt_Z2", "Z_2", "Z_1"),
+        ):
+            metadata = pm.get(key, {}).get("selection_metadata", {})
+            if metadata.get("applied"):
+                bullets.append(
+                    f"Para el ancla de ${primary_name}$ se selecciono un "
+                    f"representante eficiente usando ${secondary_name}$ como "
+                    "criterio secundario, con el valor primario fijado. Esta "
+                    "regla no demuestra unicidad ni caracteriza toda la multiplicidad."
+                )
 
     # 2. Soluciones unicas y no dominancia
     n_runs = len(solution.weighted_runs)
@@ -159,13 +165,6 @@ def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: Multio
         f"Se evaluaron **{n_runs} combinaciones de ponderaciones**, identificando **{n_unique} soluciones unicas**, "
         f"de las cuales **{n_nd} resultaron no dominadas** en el conjunto discreto evaluado."
     )
-
-    # Nota especial para evaluacion con pesos iguales (0.50, 0.50)
-    if n_runs == 1 and abs(solution.weighted_runs[0]["alpha1"] - 0.5) < 1e-4:
-        bullets.append(
-            "Con pesos iguales ($\\\\alpha = (0.50, 0.50)$) en modelos con intercambio lineal entre objetivos, "
-            "existe degeneración de la función ponderada y múltiples soluciones óptimas alternativas a lo largo del segmento eficiente."
-        )
 
     # 3. Estabilidad frente a ponderaciones evaluadas
     multi_weight_sols = [u for u in solution.unique_solutions if u["count"] > 1]
@@ -203,8 +202,11 @@ def interpret_biobjective_solution(problem: BiobjectiveProblem, solution: Multio
 
     # 5. Nota metodologica rigurosa
     bullets.append(
-        "**Nota metodologica:** Esta interpretacion describe exclusivamente el conjunto discreto de soluciones no dominadas obtenidas "
-        "para las ponderaciones evaluadas y no implica la reconstruccion completa de la frontera de Pareto continua."
+        "**Nota metodologica:** Las alternativas fueron obtenidas resolviendo "
+        "$\\max W=\\alpha_1N_1+\\alpha_2N_2$ para cada ponderacion. Esta "
+        "interpretacion describe exclusivamente el conjunto discreto obtenido y "
+        "no implica la reconstruccion completa de la frontera de Pareto continua "
+        "ni permite inferir unicidad o multiplicidad solo a partir de los pesos."
     )
 
     return bullets
