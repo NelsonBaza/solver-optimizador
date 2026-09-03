@@ -452,6 +452,8 @@ def _render_indexed_modeling() -> None:
 # Inicializacion y Sincronizacion de Estado de Sesion
 # ---------------------------------------------------------------------------
 def _init_session_state():
+    if "app_closed" not in st.session_state:
+        st.session_state.app_closed = False
     if "editor_version" not in st.session_state:
         st.session_state.editor_version = 0
     if "uploader_version" not in st.session_state:
@@ -701,6 +703,17 @@ def _load_example_bio():
 
 _init_session_state()
 
+if st.session_state.app_closed:
+    st.title("⏻ Aplicación cerrada")
+    st.write(
+        "La interfaz de esta sesión está cerrada. "
+        "El servidor local de Streamlit continúa activo."
+    )
+    if st.button("Reabrir aplicación", type="primary", key="reopen_application"):
+        st.session_state.app_closed = False
+        st.rerun()
+    st.stop()
+
 
 # ---------------------------------------------------------------------------
 # Barra Lateral (Configuracion y Gestion de Modelos)
@@ -914,6 +927,25 @@ with st.sidebar:
             """
         )
 
+    with st.expander("Sesión"):
+        st.caption(
+            "Cierra de forma segura esta sesión de la interfaz. No detiene el "
+            "servidor Streamlit. Para detener completamente el servidor local "
+            "utilice Ctrl+C en la terminal donde fue iniciado."
+        )
+        if st.button(
+            "⏻ Cerrar aplicación",
+            help=(
+                "Cierra de forma segura esta sesión de la interfaz. No detiene el "
+                "servidor Streamlit. Para detener completamente el servidor local "
+                "utilice Ctrl+C en la terminal donde fue iniciado."
+            ),
+            key="close_application",
+            width="stretch",
+        ):
+            st.session_state.app_closed = True
+            st.rerun()
+
 
 # ---------------------------------------------------------------------------
 # Encabezado Principal
@@ -943,6 +975,7 @@ with tab_form:
         ["Formulación explícita", "Modelo indexado"],
         key="formulation_route",
         required=True,
+        persist_state="session",
         width="stretch",
     )
     if formulation_route == "Modelo indexado":

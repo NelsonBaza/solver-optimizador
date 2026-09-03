@@ -1,0 +1,137 @@
+CLOSE APPLICATION SESSION CONTROL VALIDATION
+============================================
+
+Fecha: 2026-09-03 (America/Bogota)
+Repositorio: solver-optimizador
+Rama de funcionalidad: codex/feature-close-app-control
+SHA base de main: 1eb065098cf51403e7f9672e2f37a4ef0dffa6c1
+SHA inicial de main antes de la integracion: 1908c9238031629736e66ce4c35719192246b7c1
+SHA final de main: 1eb065098cf51403e7f9672e2f37a4ef0dffa6c1
+
+EVIDENCIA OBSERVADA
+-------------------
+
+1. Fases 3B y 3B.1
+   - main se actualizo exclusivamente mediante fast-forward desde
+     codex/fix-indexed-preview-synchronization.
+   - El fast-forward fue 1908c9238031629736e66ce4c35719192246b7c1 ->
+     1eb065098cf51403e7f9672e2f37a4ef0dffa6c1.
+   - No se creo merge commit, no se hizo rebase y no se hizo cherry-pick.
+   - origin/main quedo en 1eb065098cf51403e7f9672e2f37a4ef0dffa6c1.
+   - streamlit_app.py contiene el selector "Ruta de formulacion" con las
+     opciones "Formulacion explicita" y "Modelo indexado".
+   - La seleccion "Modelo indexado" invoca _render_indexed_modeling().
+   - Antes del push de main pasaron los once verificadores de regresion,
+     incluido verify_streamlit_indexed_model.py, pytest reporto 209 passed,
+     0 failed, 0 skipped y compileall termino correctamente.
+
+2. Preservacion previa a la integracion
+   - Se creo stash@{0}: On main: safety-before-indexed-main-integration.
+   - El stash contiene los siete archivos locales no rastreados informados.
+   - El stash no se aplico, no se extrajo y no se elimino.
+   - Tras un fallo de Git al retirar los archivos del working tree, se preservo
+     ademas una copia en el directorio temporal
+     solver-optimizador-safety-before-indexed-main-integration y se movieron
+     desde el working tree para dejarlo limpio sin descartarlos.
+
+3. Diseno del control de cierre
+   - Se agrego app_closed=False a la inicializacion central de session_state.
+   - El boton "⏻ Cerrar aplicacion" esta al final de st.sidebar, dentro del
+     expander discreto "Sesion" y separado de "Nuevo" y "Resolver".
+   - El boton establece app_closed=True y llama st.rerun().
+   - La pantalla cerrada se evalua inmediatamente despues de
+     _init_session_state(), antes de renderizar barra lateral, formulacion,
+     restricciones, solver, resultados, modelo indexado o graficos.
+   - La pantalla muestra "⏻ Aplicacion cerrada", aclara que el servidor local
+     continua activo, ofrece "Reabrir aplicacion" y finaliza el render con
+     st.stop().
+   - Reabrir establece app_closed=False y llama st.rerun().
+   - La ruta de formulacion usa persist_state="session" para conservar tambien
+     la seleccion visual durante el cierre temporal.
+   - No se usa os._exit, sys.exit, subprocess, taskkill, kill, APIs privadas de
+     Streamlit, JavaScript window.close ni apagado forzado del servidor.
+
+4. Conservacion y reapertura
+   - Las pruebas conservaron var_names, constraints_data y todos los estados de
+     objetivo al cerrar y reabrir.
+   - Despues de aplicar un modelo indexado, el cierre y la reapertura conservaron
+     indexed_source_spec, indexed_source_status="synchronized",
+     constraints_data y var_names.
+   - Despues de reabrir reaparecio "Ruta de formulacion" con "Formulacion
+     explicita" y "Modelo indexado"; la ruta indexada aplicada permanecio
+     seleccionada.
+
+5. Verificaciones ejecutadas despues del cambio
+   - python tools/audit/verify_close_app_control.py: PASS
+     RESULT: PASS (close application session control satisfied)
+   - python tools/audit/verify_indexed_preview_synchronization.py: PASS
+   - python tools/audit/verify_indexed_model_scaling.py: PASS
+   - python tools/audit/verify_indexed_hydroelectric_equivalence.py: PASS
+     Objetivo explicito=6701.25; objetivo indexado=6701.25.
+   - python tools/audit/verify_indexed_expression_safety.py: PASS
+   - python tools/audit/verify_streamlit_indexed_model.py: PASS
+   - python tools/audit/verify_scalable_input_hardening.py: PASS
+   - python tools/audit/verify_scalable_constraint_input.py: PASS
+   - python tools/audit/verify_streamlit_scalable_input.py: PASS
+   - python tools/audit/verify_numeric_integrity.py: PASS
+   - python tools/audit/verify_weighted_method_exact.py: PASS
+   - python tools/audit/verify_weighted_method_production.py: PASS
+     Benchmark A sin cambios respecto del oraculo aprobado.
+   - python -m pytest -ra -W default:
+     218 passed, 0 failed, 0 skipped, 1 warning.
+   - python -m compileall -q src streamlit_app.py tools/audit: PASS.
+   - python -m streamlit run streamlit_app.py --server.headless true
+     --server.port 8509 --browser.gatherUsageStats false: inicio correcto.
+   - GET http://localhost:8509/_stcore/health: HTTP 200, cuerpo "ok".
+   - El servidor de validacion se detuvo limpiamente con Ctrl+C.
+
+WARNINGS Y ANOMALIAS
+--------------------
+
+- AppTest emitio "missing ScriptRunContext" al ejecutarse en modo bare; el
+  propio warning indica que puede ignorarse en ese modo.
+- verify_streamlit_scalable_input.py emitio tres avisos de Matplotlib porque
+  tight_layout no pudo ajustar todos los margenes; las tres corridas y el
+  verificador completo pasaron.
+- pytest emitio PytestCacheWarning porque el entorno restringido no permitio
+  escribir .pytest_cache; las 218 pruebas pasaron.
+- La primera consulta CLI de documentacion para st.button y st.expander fallo
+  al codificar un simbolo Unicode con CP1252. Se repitio con salida UTF-8 y se
+  obtuvieron las firmas publicas correctas.
+- El primer git stash sin elevacion no pudo escribir el indice. Al reintentarlo
+  con autorizacion, Git creo el stash pero no retiro los archivos del working
+  tree; se conservaron mediante movimiento a la ruta temporal indicada.
+- El proyecto no configura formatter, linter ni comprobador de tipos y no se
+  encontraron comandos ruff o black disponibles; no hubo una comprobacion de
+  estas categorias que pudiera ejecutarse.
+
+INTERPRETACION
+--------------
+
+El estado app_closed afecta exclusivamente al render de la sesion actual. La
+salida temprana evita ejecutar la interfaz principal mientras esta cerrada y no
+altera el modelo. El servidor y las demas sesiones permanecen activos.
+
+CONCLUSION
+----------
+
+El control implementado satisface el cierre seguro por sesion, conserva el
+trabajo explicito e indexado y permite reabrir la interfaz sin terminacion del
+proceso Streamlit. Todas las regresiones matematicas y de UI pasaron.
+
+CAMBIOS IMPLEMENTADOS
+---------------------
+
+- streamlit_app.py: estado, pantalla cerrada, reapertura, control lateral y
+  persistencia de la ruta de formulacion.
+- tests/test_close_app_control.py: nueve pruebas AppTest CLOSE-1 a CLOSE-9.
+- tools/audit/verify_close_app_control.py: verificador reproducible end-to-end.
+- README.md: aclaracion breve del alcance del boton y uso de Ctrl+C.
+- docs/audit_evidence/close_app_control_validation.txt: esta evidencia.
+
+FUERA DE ALCANCE, CONFIRMADO
+---------------------------
+
+No se modificaron matematica, solver, metodo de ponderaciones, compilador
+indexado, parser indexado, Benchmark A, fixture hidroelectrico, Gurobi, MILP ni
+soporte de variables binarias o enteras.

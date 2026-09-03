@@ -19,6 +19,8 @@ El proyecto incluye una aplicación web interactiva en Streamlit que permite for
 La aplicación se abrirá automáticamente en su navegador en:  
 **`http://localhost:8501`**
 
+⏻ **Cerrar aplicación** cierra la interfaz de la sesión actual sin finalizar el servidor Streamlit. Para detener el servidor local use `Ctrl+C`.
+
 ### Alcance y Capacidades Actuales del MVP:
 * **Programación Lineal Monoobjetivo (LP):**
   * Variables continuas no negativas ($x_i \ge 0$).
