@@ -22,10 +22,12 @@ VARIABLE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 RESERVED_VARIABLE_NAMES = {
     "active",
     "component",
+    "component_map",
     "display",
     "index",
     "model",
     "name",
+    "obj",
     "parent_component",
     "pprint",
 }
@@ -113,7 +115,9 @@ def validate_variable_names(variable_names: Sequence[str]) -> list[str]:
         if name.lower() in RESERVED_VARIABLE_NAMES:
             errors.append(f"Variable '{name}': nombre reservado por la capa de modelado.")
         if name in seen:
-            errors.append(f"Variable duplicada: '{name}'.")
+            errors.append(
+                f"Los nombres de las variables deben ser unicos; duplicado: '{name}'."
+            )
         seen.add(name)
     return errors
 

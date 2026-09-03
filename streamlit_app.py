@@ -58,9 +58,11 @@ from solver_optimizador.constraint_import import (
     parse_objective_text,
     parse_variable_names,
     parse_xlsx_constraints,
+    validate_variable_names,
 )
 from solver_optimizador.input_application import (
     apply_constraint_import,
+    apply_manual_variable_rename,
     apply_objective_import,
     apply_variable_import,
 )
@@ -581,52 +583,13 @@ with st.sidebar:
             candidate_names = [
                 str(row["Nombre"]).strip() for _, row in edited_vars_df.iterrows()
             ]
-            if any(not name for name in candidate_names):
-                st.error("Los nombres de las variables no pueden estar vacios.")
-                has_var_name_error = True
-            elif len(set(candidate_names)) != len(candidate_names):
-                st.error("Los nombres de las variables deben ser unicos.")
+            manual_name_errors = validate_variable_names(candidate_names)
+            if manual_name_errors:
+                for error in manual_name_errors:
+                    st.error(error, icon=":material/error:")
                 has_var_name_error = True
             elif candidate_names != st.session_state.var_names:
-                old_names = list(st.session_state.var_names)
-                new_names = list(candidate_names)
-                st.session_state.obj_coeffs = {
-                    new_names[index]: float(st.session_state.obj_coeffs.get(old_names[index], 0.0))
-                    for index in range(len(new_names))
-                }
-                st.session_state.obj1_coeffs = {
-                    new_names[index]: float(st.session_state.obj1_coeffs.get(old_names[index], 0.0))
-                    for index in range(len(new_names))
-                }
-                st.session_state.obj2_coeffs = {
-                    new_names[index]: float(st.session_state.obj2_coeffs.get(old_names[index], 0.0))
-                    for index in range(len(new_names))
-                }
-                normalized_before_rename = normalize_constraints(
-                    st.session_state.constraints_data, old_names
-                )
-                renamed_constraints = []
-                for constraint in normalized_before_rename:
-                    coefficients = {}
-                    for index, new_name in enumerate(new_names):
-                        value = constraint["coefficients"].get(old_names[index], 0.0)
-                        if value != 0.0:
-                            coefficients[new_name] = value
-                    renamed_constraints.append(
-                        {
-                            "name": constraint["name"],
-                            "coefficients": coefficients,
-                            "operator": constraint["operator"],
-                            "rhs": constraint["rhs"],
-                        }
-                    )
-                st.session_state.constraints_data = renamed_constraints
-                st.session_state.var_names = new_names
-                st.session_state.last_solution = None
-                st.session_state.last_solution_type = None
-                st.session_state.last_solution_problem = None
-                st.session_state.last_solution_signature = None
-                st.session_state.editor_version += 1
+                apply_manual_variable_rename(st.session_state, candidate_names)
                 st.rerun()
         else:
             st.info(
@@ -1336,7 +1299,10 @@ with tab_form:
     # -----------------------------------------------------------------------
     st.markdown("---")
     if has_var_name_error:
-        st.error("⚠️ **No es posible resolver ni descargar el modelo:** Existen errores en los nombres de las variables (nombres vacios o duplicados).")
+        st.error(
+            "⚠️ **No es posible resolver ni descargar el modelo:** "
+            "Existen errores en los nombres de las variables."
+        )
     elif cons_norm_error:
         st.error(f"⚠️ **No es posible resolver ni descargar el modelo:** {cons_norm_error}")
     elif not canonical_constraints:

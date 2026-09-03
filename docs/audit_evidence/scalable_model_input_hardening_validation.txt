@@ -1,0 +1,173 @@
+FASE 3A.1 - EVIDENCIA DE HARDENING DE ENTRADA ESCALABLE
+Fecha: 2026-09-02 (America/Bogota)
+Rama: codex/fix-scalable-input-hardening
+Rama base: codex/feature-scalable-model-input
+Commit base: 8ece46a9a6a8c442eae354e9ac620fbd10fe148f
+Python: 3.13.1
+Pyomo: 6.10.1
+HiGHS: 1.15.1
+Streamlit: 1.62.0
+
+DEFECTOS CORREGIDOS
+1. Una expresion calculada con sum([]) producia el entero Python 0. Al comparar
+   ese valor con el RHS, Pyomo recibia True/False y lanzaba
+   InvalidConstraintError antes de ejecutar HiGHS.
+2. La salvaguarda temporal de nombres no incluia component_map ni obj, y el
+   editor manual y JSON no compartian la validacion de la importacion masiva.
+
+SOLUCION APLICADA
+- pyomo_utils.build_linear_expression crea pyo.quicksum para terminos no nulos.
+- Cuando no existen terminos, devuelve 0.0 multiplicado por la primera variable
+  Pyomo. El cero permanece simbolico y no modifica la region factible.
+- lp_solver y multiobjective reutilizan exactamente el mismo helper para las
+  restricciones originales.
+- validate_variable_names es la fuente unica de la salvaguarda temporal para
+  bloque, formato ancho, formato disperso, controlador del editor manual y JSON.
+- apply_manual_variable_rename preserva la migracion posicional existente, pero
+  valida atomicamente antes de modificar session_state.
+- AUD-HIGH-06 permanece ABIERTO: no se introdujeron IDs internos.
+
+RESTRICCIONES CONSTANTES
+0 <= 10 -> optimal; LHS=0; slack=10.
+0 >= 10 -> infeasible.
+0 = 0 -> optimal; LHS=0; slack=0; activa con la tolerancia vigente.
+0 = 10 -> infeasible.
+
+PROYECCION DE VARIABLES
+Secuencia: variables x1,x2; R1: x1 <= 10; apply_variable_import([x2]).
+Resultado canonico: coefficients={}; resolucion posterior: optimal, sin crash.
+Variante R1: x1 >= 10 proyectada a 0 >= 10: infeasible, sin crash.
+
+SALVAGUARDA TEMPORAL DE NOMBRES
+Lista case-insensitive:
+active, component, component_map, display, index, model, name, obj,
+parent_component, pprint
+
+Rechazados antes de Pyomo por las rutas probadas: name, component_map, obj.
+Tambien se comprobo el tratamiento equivalente de mayusculas/minusculas.
+Aceptados: x1, T1, V4, GT_12, demanda_aux, variable2026.
+La lista no se declara exhaustiva.
+
+VERIFICADOR DE HARDENING
+Comando: python tools/audit/verify_scalable_input_hardening.py
+Salida:
+SCALABLE_INPUT_HARDENING_VERIFICATION
+constant_constraint=0 <= 10 status=optimal
+constant_constraint=0 >= 10 status=infeasible
+constant_constraint=0 = 0 status=optimal
+constant_constraint=0 = 10 status=infeasible
+projection=PASS coefficients={} status=optimal
+reserved_names_rejected=obj,component_map,name
+valid_name_accepted=x1
+RESULT: PASS (scalable input hardening contract satisfied)
+
+REGRESION FASE 3A
+Comando: python tools/audit/verify_scalable_constraint_input.py
+Salida resumida:
+variables=100
+constraints=500
+nonzeros=900
+input_format=csv_sparse
+solver_status=optimal
+objective_value=1000
+RESULT: PASS (scalable constraint input contract satisfied)
+
+Comando: python tools/audit/verify_streamlit_scalable_input.py
+Salida resumida:
+CASE 1 PASS: TSV paste, 50 constraints, preview<=20, solved all 50
+CASE 2 PASS: CSV UTF-8-SIG, 100 constraints, preview<=20, solved all 100
+CASE 3 PASS: XLSX sheet Modelo, 100 constraints, preview<=20, solved all 100
+CASE 4 PASS: sparse long, 300 constraints, 598 nonzeros, solved all 300
+RESULT: PASS (Streamlit scalable input interaction contract satisfied)
+
+REGRESION FASE 2A
+Comando: python tools/audit/verify_numeric_integrity.py
+Salida resumida:
+expected_x=1.0000000000000001e-09
+published_x=1.0000000000000001e-09
+published_objective=1
+reconstructed_objective_from_published_x=1
+published_lhs=1
+reconstructed_lhs_from_published_x=1
+RESULT: PASS (numeric integrity contract satisfied)
+
+REGRESION FASE 2B
+Comando: python tools/audit/verify_weighted_method_exact.py
+Resultado: PASS (pure normalized weighted-sum oracle satisfied)
+
+Comando: python tools/audit/verify_weighted_method_production.py
+Benchmark A:
+- alpha=(0.0,1.0) -> x=(0,130), Z1=390, Z2=169
+- alpha=(0.2,0.8) -> x=(0,130), Z1=390, Z2=169
+- alpha=(0.4,0.6) -> x=(80,50), Z1=950, Z2=129
+- alpha=(0.5,0.5) -> x=(80,50), Z1=950, Z2=129
+- alpha=(0.6,0.4) -> x=(80,50), Z1=950, Z2=129
+- alpha=(0.8,0.2) -> x=(80,50), Z1=950, Z2=129
+- alpha=(1.0,0.0) -> x=(100,0), Z1=1000, Z2=80
+Hidroelectrico monoobjetivo conservado: Z*=6701.25.
+RESULT: PASS (production normalized weighted-sum contract satisfied)
+
+PYTEST COMPLETO
+Comando: python -m pytest -ra -W default
+Resultado final:
+collected 154 items
+tests/test_constraint_import.py ...........................              [ 17%]
+tests/test_custom_variables.py ......                                    [ 21%]
+tests/test_hydroelectric_e2e.py ....                                     [ 24%]
+tests/test_input_hardening.py ..............................             [ 43%]
+tests/test_interpretation.py ........                                    [ 48%]
+tests/test_lexicographic_payoff.py ............                          [ 56%]
+tests/test_lp_core.py ............                                       [ 64%]
+tests/test_model_io.py ............                                      [ 72%]
+tests/test_model_signature.py .......                                    [ 76%]
+tests/test_numeric_integrity.py .......                                  [ 81%]
+tests/test_plotting_extended.py ....                                     [ 83%]
+tests/test_streamlit_integrity.py .....                                  [ 87%]
+tests/test_weighted_method.py ....................                       [100%]
+154 passed, 0 failed, 0 skipped, 1 warning in 10.46s
+
+COMPILEALL
+Comando: python -m compileall -q src streamlit_app.py tools/audit
+Resultado: PASS (exit code 0, sin salida).
+
+WARNINGS Y COMPORTAMIENTOS OBSERVADOS
+- PytestCacheWarning: el entorno administrado no permite crear .pytest_cache;
+  no afecta el resultado de las pruebas.
+- AppTest informa missing ScriptRunContext en modo bare; es esperado por el
+  arnes oficial de Streamlit.
+- plotting.py mantiene el warning Tight layout not applied para graficos de
+  100/300 restricciones; pertenece al hallazgo de plotting fuera de alcance.
+- Una ejecucion intermedia encontro que el nuevo mensaje de duplicados ya no
+  contenia la frase historica "deben ser unicos". Se conservo ese contrato en
+  la validacion central; no se cambio el test para ocultar la incompatibilidad.
+
+ARCHIVOS DE PRODUCCION CREADOS
+- src/solver_optimizador/pyomo_utils.py
+
+ARCHIVOS DE PRODUCCION MODIFICADOS
+- src/solver_optimizador/__init__.py
+- src/solver_optimizador/constraint_import.py
+- src/solver_optimizador/input_application.py
+- src/solver_optimizador/lp_solver.py
+- src/solver_optimizador/model_io.py
+- src/solver_optimizador/multiobjective.py
+- streamlit_app.py
+
+TESTS Y VERIFICADORES
+- tests/test_input_hardening.py (creado)
+- tests/test_streamlit_integrity.py (modificado)
+- tools/audit/verify_scalable_input_hardening.py (creado)
+
+DOCUMENTACION
+- docs/ENTRADA_ESCALABLE_MODELOS.md
+- docs/AUDITORIA_TECNICA_MATEMATICA.md
+- docs/STATUS.md
+- docs/audit_evidence/scalable_model_input_hardening_validation.txt
+
+CONFIRMACION DE ALCANCE
+- No Gurobi; backend conservado Pyomo + APPSI HiGHS.
+- No Fase 3B, sets, parameters, forall, familias indexadas ni AST.
+- No MILP ni variables binarias.
+- No IDs internos definitivos; AUD-HIGH-06 sigue abierto.
+- Sin cambios a normalizacion, metodo ponderado, Pareto o region factible.
+- La evidencia original de Fase 3A permanece intacta.

@@ -33,6 +33,15 @@ Cada restricción se almacena como:
 Los coeficientes cero no se guardan. Una matriz de 1.000 restricciones, 100
 variables y dos términos por fila contiene 2.000 entradas, no 100.000.
 
+### Restricciones constantes
+
+Una restricción canónica puede no contener términos variables, por ejemplo
+`{"coefficients": {}, "operator": "<=", "rhs": 10.0}`. Se conserva como la
+restricción matemática `0 <= 10`; no se elimina ni se convierte en un booleano
+de Python. Las variantes `0 >= b` y `0 = b` mantienen igualmente su semántica,
+incluidos los casos infactibles. Si el modelo es óptimo, la restricción continúa
+apareciendo en los resultados con su LHS y holgura correspondientes.
+
 El formato ancho representa formalmente `A x op b`. Por ejemplo:
 
 ```text
@@ -144,6 +153,17 @@ explícitamente, variables omitidas reciben coeficiente cero.
 Se rechazan `NaN`, `Infinity`, `-Infinity`, números inválidos, operadores fuera
 de `<=`, `>=`, `=`, nombres vacíos y duplicados. No se utiliza `eval`, `exec` ni
 interpretación de código. Los archivos XLSX nunca se ejecutan.
+
+### Salvaguarda temporal de nombres
+
+Todas las rutas de Fase 3A —bloque, formatos ancho y disperso, editor manual y
+JSON— usan una única validación. Se rechazan, sin distinguir mayúsculas, las
+colisiones Pyomo conocidas `active`, `component`, `component_map`, `display`,
+`index`, `model`, `name`, `obj`, `parent_component` y `pprint`.
+
+Esta lista es una salvaguarda temporal y no se considera exhaustiva. El hallazgo
+AUD-HIGH-06 permanece abierto hasta implementar IDs internos seguros separados
+de los nombres visibles del usuario.
 
 ## 9. Aplicación atómica y trazabilidad
 

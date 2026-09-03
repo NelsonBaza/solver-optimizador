@@ -115,6 +115,61 @@ def apply_variable_import(
     _next_editor_version(state)
 
 
+def apply_manual_variable_rename(
+    state: Any,
+    variable_names: Sequence[str],
+) -> None:
+    """Aplica el renombrado posicional del editor tras validacion central."""
+
+    new_names = list(variable_names)
+    errors = validate_variable_names(new_names)
+    if errors:
+        raise ValueError("No se puede aplicar el renombrado: " + "; ".join(errors))
+    old_names = list(_get(state, "var_names", []))
+    if len(new_names) != len(old_names):
+        raise ValueError("El editor manual no puede cambiar la cantidad de variables.")
+
+    renamed_objectives = {}
+    for objective_key in ("obj_coeffs", "obj1_coeffs", "obj2_coeffs"):
+        current = _get(state, objective_key, {})
+        renamed_objectives[objective_key] = {
+            new_names[index]: float(current.get(old_names[index], 0.0))
+            for index in range(len(new_names))
+        }
+
+    normalized = normalize_constraints(
+        list(_get(state, "constraints_data", [])), old_names
+    )
+    renamed_constraints = []
+    for constraint in normalized:
+        coefficients = {
+            new_names[index]: constraint["coefficients"][old_names[index]]
+            for index in range(len(new_names))
+            if old_names[index] in constraint["coefficients"]
+        }
+        renamed_constraints.append(
+            {
+                "name": constraint["name"],
+                "coefficients": coefficients,
+                "operator": constraint["operator"],
+                "rhs": constraint["rhs"],
+            }
+        )
+
+    _set(state, "var_names", new_names)
+    _set(state, "num_vars", len(new_names))
+    for objective_key, coefficients in renamed_objectives.items():
+        _set(state, objective_key, coefficients)
+    _set(state, "constraints_data", renamed_constraints)
+    _set(
+        state,
+        "variable_import_metadata",
+        _metadata("manual_editor", None, variable_count=len(new_names)),
+    )
+    _invalidate_solution(state)
+    _next_editor_version(state)
+
+
 def apply_constraint_import(
     state: Any,
     result: ConstraintImportResult,

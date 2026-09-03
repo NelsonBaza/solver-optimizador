@@ -39,6 +39,7 @@ from .problem_builder import (
     build_biobjective_problem_from_state,
 )
 from .constraint_import import (
+    RESERVED_VARIABLE_NAMES,
     ConstraintImportResult,
     ObjectiveImportResult,
     VariableImportResult,
@@ -49,9 +50,11 @@ from .constraint_import import (
     parse_objective_text,
     parse_variable_names,
     parse_xlsx_constraints,
+    validate_variable_names,
 )
 from .input_application import (
     apply_constraint_import,
+    apply_manual_variable_rename,
     apply_objective_import,
     apply_variable_import,
 )
@@ -93,6 +96,7 @@ __all__ = [
     "build_lp_problem_from_state",
     "build_biobjective_problem_from_state",
     "ConstraintImportResult",
+    "RESERVED_VARIABLE_NAMES",
     "ObjectiveImportResult",
     "VariableImportResult",
     "constraints_to_sparse_csv",
@@ -102,7 +106,9 @@ __all__ = [
     "parse_objective_text",
     "parse_variable_names",
     "parse_xlsx_constraints",
+    "validate_variable_names",
     "apply_constraint_import",
+    "apply_manual_variable_rename",
     "apply_objective_import",
     "apply_variable_import",
     "solve_lp",

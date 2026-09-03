@@ -48,6 +48,16 @@ def test_streamlit_app_ast_global_names_defined():
     assert "deserialize_model" in known_names
     assert "solve_lp" in known_names
     assert "solve_biobjective_weighted" in known_names
+    assert "validate_variable_names" in known_names
+    assert "apply_manual_variable_rename" in known_names
+
+    called_names = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "validate_variable_names" in called_names
+    assert "apply_manual_variable_rename" in called_names
 
 
 def test_streamlit_app_apptest_initial_render_and_buttons_enabled():

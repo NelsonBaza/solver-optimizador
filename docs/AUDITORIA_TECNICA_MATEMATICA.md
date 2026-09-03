@@ -745,6 +745,10 @@ Ningún otro hallazgo de esta auditoría se marca como corregido en Fase 2A.
 
 ### AUD-HIGH-06 — Nombres visibles usados directamente como componentes Pyomo
 
+- **Estado:** ABIERTO. Mitigación parcial Fase 3A.1: las rutas de entrada en
+  bloque, tabla ancha, formato disperso, editor manual y JSON rechazan las
+  colisiones Pyomo conocidas mediante una política temporal única. El hallazgo
+  no se considera corregido hasta desacoplar nombres visibles e IDs internos.
 - **Severidad:** ALTO
 - **Archivo:** `src/solver_optimizador/lp_solver.py:46-63`; `src/solver_optimizador/multiobjective.py:304-327`; validación UI/builder.
 - **Función/líneas:** construcción dinámica mediante `setattr`.

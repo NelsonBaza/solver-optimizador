@@ -17,6 +17,7 @@ from .lp_models import (
     is_finite_number,
 )
 from .lp_solver import solve_lp
+from .pyomo_utils import build_linear_expression
 
 
 NORMALIZATION_RANGE_TOL = 1e-7
@@ -202,10 +203,7 @@ def _add_original_model(
         var_dict[variable_name] = variable
 
     for index, constraint in enumerate(problem.constraints):
-        expression = sum(
-            coefficient * var_dict[variable_name]
-            for variable_name, coefficient in constraint.coefficients.items()
-        )
+        expression = build_linear_expression(constraint.coefficients, var_dict)
         if constraint.operator == Operator.LE:
             pyomo_constraint = pyo.Constraint(expr=expression <= constraint.rhs)
         elif constraint.operator == Operator.GE:

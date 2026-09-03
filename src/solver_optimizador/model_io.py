@@ -9,6 +9,8 @@ import math
 import re
 from typing import Dict, Any, Optional, Tuple, List
 
+from .constraint_import import validate_variable_names
+
 SCHEMA_VERSION = "1.0"
 SUPPORTED_SCHEMA_VERSIONS = {"1.0"}
 
@@ -229,12 +231,9 @@ def validate_model_dict(data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     if not isinstance(variables, list) or len(variables) == 0:
         return False, "El problema debe definir una lista no vacia de variables."
 
-    if len(set(variables)) != len(variables):
-        return False, "Los nombres de las variables deben ser unicos."
-
-    for v in variables:
-        if not isinstance(v, str) or not v.strip():
-            return False, f"Nombre de variable invalido: {v}"
+    variable_errors = validate_variable_names(variables)
+    if variable_errors:
+        return False, variable_errors[0]
 
     # 4. Validar objetivos
     if prob_type == "Monoobjetivo":
@@ -309,6 +308,9 @@ def serialize_model(
 
     prob_type = problem_dict.get("type", "Monoobjetivo")
     var_names = list(problem_dict.get("variables", ["x1", "x2"]))
+    variable_errors = validate_variable_names(var_names)
+    if variable_errors:
+        raise ValueError("Variables invalidas: " + "; ".join(variable_errors))
 
     prob_clean: Dict[str, Any] = {
         "type": prob_type,
