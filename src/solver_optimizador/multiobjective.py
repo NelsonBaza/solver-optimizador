@@ -125,8 +125,8 @@ def solve_lexicographic_extreme(
         x_final = res_prim.variable_values
         final_status = res_prim.status
 
-    z1_final = round(problem.objective1.evaluate(x_final), 6)
-    z2_final = round(problem.objective2.evaluate(x_final), 6)
+    z1_final = problem.objective1.evaluate(x_final)
+    z2_final = problem.objective2.evaluate(x_final)
     sec_final_val = obj_sec.evaluate(x_final)
 
     # Detectar si el desempate mejoro el objetivo secundario
@@ -140,8 +140,8 @@ def solve_lexicographic_extreme(
     return {
         "status": final_status,
         "primary_status": res_prim.status,
-        "primary_optimal_value": round(prim_val, 6),
-        "raw_secondary_value": round(sec_prim_val, 6),
+        "primary_optimal_value": prim_val,
+        "raw_secondary_value": sec_prim_val,
         "x": x_final,
         "Z1": z1_final,
         "Z2": z2_final,
@@ -230,12 +230,12 @@ def solve_biobjective_weighted(
     z2_range = z2_max - z2_min
 
     normalization_ranges = {
-        "Z1_max": round(z1_max, 6),
-        "Z1_min": round(z1_min, 6),
-        "Z1_range": round(z1_range, 6),
-        "Z2_max": round(z2_max, 6),
-        "Z2_min": round(z2_min, 6),
-        "Z2_range": round(z2_range, 6),
+        "Z1_max": z1_max,
+        "Z1_min": z1_min,
+        "Z1_range": z1_range,
+        "Z2_max": z2_max,
+        "Z2_min": z2_min,
+        "Z2_range": z2_range,
     }
 
     if z1_range < 1e-7 or z2_range < 1e-7:
@@ -289,7 +289,7 @@ def solve_biobjective_weighted(
             z2_val = opt_z1["Z2"]
             term1 = (z1_val / z1_range) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_val / z1_range)
             term2 = (z2_val / z2_range) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_val / z2_range)
-            w_val = round(a1 * term1 + a2 * term2, 6)
+            w_val = a1 * term1 + a2 * term2
             status_str = "Optimo"
         elif abs(a1 - 0.0) < 1e-6 and abs(a2 - 1.0) < 1e-6:
             # Extremo Z2 eficiente directamente
@@ -298,7 +298,7 @@ def solve_biobjective_weighted(
             z2_val = opt_z2["Z2"]
             term1 = (z1_val / z1_range) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_val / z1_range)
             term2 = (z2_val / z2_range) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_val / z2_range)
-            w_val = round(a1 * term1 + a2 * term2, 6)
+            w_val = a1 * term1 + a2 * term2
             status_str = "Optimo"
         else:
             mw = pyo.ConcreteModel(name=f"Weighted_{idx}")
@@ -332,10 +332,12 @@ def solve_biobjective_weighted(
             if "optimal" in term_str.lower():
                 if res_w.solution_loader:
                     res_w.solution_loader.load_vars()
-                x_vals = {v: round(float(pyo.value(var_dict[v])), 6) for v in problem.variables}
-                z1_val = round(problem.objective1.evaluate(x_vals), 6)
-                z2_val = round(problem.objective2.evaluate(x_vals), 6)
-                w_val = round(float(pyo.value(mw.obj.expr)), 6)
+                x_vals = {v: float(pyo.value(var_dict[v])) for v in problem.variables}
+                z1_val = problem.objective1.evaluate(x_vals)
+                z2_val = problem.objective2.evaluate(x_vals)
+                z1_term = (z1_val / z1_range) if problem.objective1.sense == Sense.MAXIMIZE else (-z1_val / z1_range)
+                z2_term = (z2_val / z2_range) if problem.objective2.sense == Sense.MAXIMIZE else (-z2_val / z2_range)
+                w_val = a1 * z1_term + a2 * z2_term
                 status_str = "Optimo"
             else:
                 x_vals = None

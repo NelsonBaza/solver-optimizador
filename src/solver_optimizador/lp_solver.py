@@ -83,6 +83,7 @@ def solve_lp(problem: LPProblem, tol: float = 1e-6) -> LPSolution:
             status_message=f"Error al ejecutar HiGHS: {str(exc)}",
             raw_termination="Exception",
             execution_time_sec=t_end - t_start,
+            activity_tolerance=tol,
         )
 
     t_end = time.perf_counter()
@@ -93,7 +94,9 @@ def solve_lp(problem: LPProblem, tol: float = 1e-6) -> LPSolution:
         if results.solution_loader:
             results.solution_loader.load_vars()
         var_values = {v: float(pyo.value(var_dict[v])) for v in problem.variables}
-        obj_val = float(pyo.value(model.obj))
+        # Todos los resultados matematicos canonicos se reconstruyen desde el
+        # mismo vector publicado. El redondeo pertenece exclusivamente a la UI.
+        obj_val = problem.objective.evaluate(var_values)
 
         con_results = []
         for c in problem.constraints:
@@ -103,10 +106,10 @@ def solve_lp(problem: LPProblem, tol: float = 1e-6) -> LPSolution:
             con_results.append(
                 ConstraintResult(
                     name=c.name,
-                    lhs=round(lhs_val, 6),
+                    lhs=lhs_val,
                     operator=c.operator.value,
                     rhs=c.rhs,
-                    slack=round(slack, 6),
+                    slack=slack,
                     is_active=is_active,
                 )
             )
@@ -115,10 +118,11 @@ def solve_lp(problem: LPProblem, tol: float = 1e-6) -> LPSolution:
             status=status,
             status_message=status.user_friendly_message,
             raw_termination=raw_term,
-            objective_value=round(obj_val, 6),
-            variable_values={v: round(val, 6) for v, val in var_values.items()},
+            objective_value=obj_val,
+            variable_values=var_values,
             constraint_results=con_results,
             execution_time_sec=round(exec_time, 6),
+            activity_tolerance=tol,
         )
     else:
         return LPSolution(
@@ -126,4 +130,5 @@ def solve_lp(problem: LPProblem, tol: float = 1e-6) -> LPSolution:
             status_message=status.user_friendly_message,
             raw_termination=raw_term,
             execution_time_sec=round(exec_time, 6),
+            activity_tolerance=tol,
         )

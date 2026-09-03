@@ -25,7 +25,7 @@ El flujo básico UI → normalización → builder → Pyomo/HiGHS funciona para
 7. `<` y `>` no son capacidades reales: una ruta los rechaza y otra los transforma silenciosamente en `<=` y `>=`.
 8. El fixture hidroeléctrico es algebraicamente consistente, pero el repositorio no contiene una especificación física externa con unidades que permita certificar que `PH_t = 2.4525 T_t` y `GH_t = PH_t` sean las conversiones pretendidas. Tampoco modela explícitamente duración de periodo, capacidad térmica, rampas, costo/penalización de vertimiento ni una meta terminal distinta de `V_4 >= 40`.
 
-La primera corrección recomendada es establecer un contrato numérico de resultados: conservar valores de precisión completa como datos canónicos, usar redondeo solo para presentación y verificar antes de devolver el resultado que las variables publicadas, objetivos, LHS, holguras y tolerancias sean coherentes.
+La primera corrección recomendada fue establecer un contrato numérico de resultados: conservar valores de precisión completa como datos canónicos, usar redondeo solo para presentación y verificar que las variables publicadas, objetivos, LHS y holguras sean coherentes. Esa corrección se implementó en la rama aislada de Fase 2A; los demás hallazgos permanecen abiertos.
 
 ## 2. Método y límites de la auditoría
 
@@ -140,6 +140,10 @@ python -m streamlit run streamlit_app.py --server.headless true --server.port 85
 - El barrido de nombres versionados no encontró `.env`, llaves, licencias o archivos de credenciales según los patrones auditados.
 - `.gitignore` excluye `.venv`, cachés, `.env`, variantes `.env.*`, licencias y logs de solvers. Como efecto lateral, el patrón `.env.*` también impediría versionar normalmente un `.env.example`.
 - No hay formateador, linter ni comprobador de tipos configurados en `pyproject.toml`; por tanto no se puede reportar su ejecución.
+
+### 3.5 Validación POST-FIX de Fase 2A
+
+La corrección de `AUD-CRIT-01` añadió siete casos, elevando la suite a **76 PASS, 0 FAIL, 0 SKIP**, con el mismo warning de caché. El verificador canónico y el oráculo exacto de Benchmark A terminaron en PASS. La salida completa está en `docs/audit_evidence/aud_crit_01_fix_validation.txt`.
 
 ## 4. Separación entre validación de software y validación matemática
 
@@ -627,6 +631,20 @@ HiGHS se presenta oficialmente como software para LP, MIP y QP a gran escala: [H
 - **Recomendación:** contrato de precisión completa, tolerancias explícitas, serialización segura y verificación de residuo antes de emitir `optimal`.
 - **Tests a agregar/modificar:** escalas `1e-12..1e12`, reconstrucción `Z(x)`/`Ax`, factibilidad del resultado serializado y comparación UI sin alterar el dato base.
 
+**Estado: CORREGIDO EN FASE 2A.**
+
+- **Rama:** `codex/fix-aud-crit-01-numeric-integrity`.
+- **Commit:** commit único de Fase 2A que contiene este documento; su SHA se obtiene con `git rev-parse HEAD` y se registra en la respuesta de publicación. Incluir el propio SHA dentro del mismo commit sería una referencia circular que alteraría ese SHA.
+- **Estrategia aplicada:** se eliminaron redondeos de los datos matemáticos canónicos; `objective_value`, variables, LHS y holguras se reconstruyen desde el mismo vector de floats del solver. El barrido multiobjetivo conserva `x`, `Z1`, `Z2`, rangos y `W` sin redondeo de presentación. Los tiempos y la generación preexistente de pesos mantienen su comportamiento.
+- **Tolerancia:** `is_active` continúa usando `abs(slack) < tol`; `LPSolution.activity_tolerance` registra el valor empleado sin modificar parámetros internos de HiGHS.
+- **Presentación:** Streamlit y la interpretación formatean copias para lectura y emplean notación significativa/científica cuando corresponde, sin sobrescribir la solución.
+- **Tests añadidos:** `tests/test_numeric_integrity.py`, con siete casos recolectados que cubren la igualdad escalada crítica, reconstrucción de objetivo, reconstrucción de LHS/holguras, escalas `1e-9`, `1` y `1e9`, extremos lexicográficos y una corrida ponderada escalada.
+- **Evidencia PRE-FIX:** `docs/audit_evidence/fase1b_validation.txt`.
+- **Evidencia POST-FIX:** `docs/audit_evidence/aud_crit_01_fix_validation.txt`.
+- **Resultado POST-FIX:** `x=1.0000000000000001e-09`, `Z=1`, `LHS=1`; objetivo y LHS reconstruidos desde el `x` publicado también son `1`.
+
+Ningún otro hallazgo de esta auditoría se marca como corregido en Fase 2A.
+
 ### AUD-HIGH-01 — Método multiobjetivo híbrido y valor `W` no documentado consistentemente
 
 - **Severidad:** ALTO
@@ -1007,9 +1025,9 @@ Arquitectura posterior:
 - `pyproject.toml` para extras/dependencias directas;
 - posible reorganización de benchmarks y resultados.
 
-## 17. Primera corrección propuesta
+## 17. Primera corrección ejecutada en Fase 2A
 
-Crear una PR pequeña y aislada de **integridad numérica de resultados**:
+La rama aislada de **integridad numérica de resultados** implementa:
 
 1. conservar valores internos sin redondeo en `LPSolution` y resultados multiobjetivo;
 2. calcular objetivo, LHS y holguras desde el mismo vector publicado;
@@ -1017,7 +1035,7 @@ Crear una PR pequeña y aislada de **integridad numérica de resultados**:
 4. registrar tolerancias utilizadas;
 5. añadir el caso `1e9·x=1` y pruebas de reevaluación como criterios de aceptación.
 
-Esta corrección precede a la arquitectura nueva porque cualquier benchmark, adaptador o importador futuro necesita primero un resultado verificable y coherente.
+Esta corrección precede a la arquitectura nueva porque cualquier benchmark, adaptador o importador futuro necesita primero un resultado verificable y coherente. La rama no se integra en `main` hasta completar revisión externa.
 
 ## 18. Apéndice de reproducción independiente
 
@@ -1043,19 +1061,21 @@ RESULT: PASS (all exact Fraction assertions satisfied)
 
 El stdout preservado está en `docs/audit_evidence/fase1b_validation.txt`.
 
-### 18.3 Reproducción versionada de integridad numérica
+### 18.3 Verificación versionada de integridad numérica
 
-El archivo `tools/audit/verify_numeric_integrity.py` sí usa `solve_lp`, porque mide el defecto del código bajo prueba. No es un oráculo independiente del solver y se etiqueta expresamente como reproducción de comportamiento actual.
+La salida PRE-FIX del antiguo verificador permanece inmutable en `docs/audit_evidence/fase1b_validation.txt`. En Fase 2A, `tools/audit/verify_numeric_integrity.py` se convirtió en verificador del contrato corregido. Sí usa `solve_lp`, por lo que es una comprobación de regresión del código bajo prueba, no un oráculo independiente del solver.
 
 ```powershell
 python tools/audit/verify_numeric_integrity.py
 ```
 
-La ejecución comprueba que el `x` publicado es cero mientras objetivo y LHS publicados son uno, y termina con:
+La ejecución comprueba que `x≈1e-9` y que objetivo y LHS publicados y reconstruidos son aproximadamente uno. Termina con:
 
 ```text
-RESULT: PASS (current production defect reproduced; no fix applied)
+RESULT: PASS (numeric integrity contract satisfied)
 ```
+
+La salida POST-FIX se preserva en `docs/audit_evidence/aud_crit_01_fix_validation.txt`.
 
 ### 18.4 Segunda formulación hidroeléctrica indexada
 
@@ -1107,8 +1127,8 @@ Nombres Pyomo:   name, component_map, obj
 JSON no finito:  coeficiente de objetivo = Infinity
 ```
 
-Estos casos deben convertirse en pruebas permanentes solo después de aprobar el contrato esperado; hoy documentan el comportamiento observado.
+El caso de precisión se convirtió en prueba permanente en Fase 2A. Los demás casos deben abordarse únicamente en las fases correspondientes a sus hallazgos; siguen documentando el comportamiento observado.
 
 ---
 
-**Estado de Fase 1B:** auditoría corregida y evidencia reproducible versionada en la rama `codex/auditoria-fase1b`. No se implementó ninguna corrección de producción ni se realizó merge a `main`.
+**Estado de Fase 2A:** `AUD-CRIT-01` corregido y validado en `codex/fix-aud-crit-01-numeric-integrity`. La auditoría Fase 1B sí fue integrada en `main`; la corrección Fase 2A permanece únicamente en su rama hasta revisión externa.

@@ -1,0 +1,140 @@
+FASE 2A — EVIDENCIA POST-FIX DE AUD-CRIT-01
+============================================
+
+Fecha: 2026-09-02T20:56:49.0994557-05:00
+Repositorio: solver-optimizador
+Rama: codex/fix-aud-crit-01-numeric-integrity
+Commit base: 1c79c01ed4a721027a667cd4eb70a26cd2e0df75
+
+DEFECTO CORREGIDO
+-----------------
+El motor redondeaba a seis decimales el vector publicado, pero publicaba objetivo
+y LHS calculados con el vector interno sin redondear. El objeto de solucion podia
+ser matematicamente contradictorio.
+
+Evidencia PRE-FIX inmutable:
+  docs/audit_evidence/fase1b_validation.txt
+
+PRE-FIX para max 1e9*x sujeto a 1e9*x=1:
+  x publicado: 0
+  objetivo publicado: 1
+  objetivo reconstruido desde x publicado: 0
+  LHS publicado: 1
+  LHS reconstruido desde x publicado: 0
+
+POST-FIX:
+  x publicado: 1.0000000000000001e-09
+  objetivo publicado: 1
+  objetivo reconstruido desde x publicado: 1
+  LHS publicado: 1
+  LHS reconstruido desde x publicado: 1
+
+ARCHIVOS DE PRODUCCION MODIFICADOS
+---------------------------------
+  src/solver_optimizador/lp_models.py
+  src/solver_optimizador/lp_solver.py
+  src/solver_optimizador/multiobjective.py
+  src/solver_optimizador/interpretation.py
+  streamlit_app.py
+
+TESTS CREADOS
+-------------
+  tests/test_numeric_integrity.py
+  7 casos recolectados: igualdad critica, reconstruccion de objetivo,
+  reconstruccion de LHS/holguras, tres escalas numericas y multiobjetivo.
+
+OTROS ARTEFACTOS MODIFICADOS
+----------------------------
+  tools/audit/verify_numeric_integrity.py
+  docs/AUDITORIA_TECNICA_MATEMATICA.md
+  docs/audit_evidence/aud_crit_01_fix_validation.txt (nuevo)
+
+VERIFICADOR DEL CONTRATO CORREGIDO
+----------------------------------
+Comando:
+  python tools/audit/verify_numeric_integrity.py
+
+Salida:
+NUMERIC_INTEGRITY_CONTRACT_VERIFICATION
+expected_x=1.0000000000000001e-09
+published_x=1.0000000000000001e-09
+published_objective=1
+reconstructed_objective_from_published_x=1
+published_lhs=1
+reconstructed_lhs_from_published_x=1
+RESULT: PASS (numeric integrity contract satisfied)
+
+ORACULO EXACTO DE BENCHMARK A
+-----------------------------
+Comando:
+  python tools/audit/verify_benchmark_a_exact.py
+
+Resultado resumido:
+  Vertices: (0,0), (0,130), (80,50), (100,0)
+  Optimo Z1: x=(100,0), Z1=1000, Z2=80
+  Optimo Z2: x=(0,130), Z1=390, Z2=169
+  Rangos: Z1=610, Z2=89
+  Las siete ponderaciones conservaron los puntos exactos esperados.
+  RESULT: PASS (all exact Fraction assertions satisfied)
+
+PYTEST COMPLETO
+---------------
+Comando:
+  python -m pytest -ra -W default
+
+Salida:
+============================= test session starts =============================
+platform win32 -- Python 3.13.1, pytest-9.1.1, pluggy-1.6.0
+rootdir: E:\AI\solver-optimizador
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.14.2
+collected 76 items
+
+tests\test_custom_variables.py ......                                    [  7%]
+tests\test_hydroelectric_e2e.py ....                                     [ 13%]
+tests\test_interpretation.py ........                                    [ 23%]
+tests\test_lexicographic_payoff.py ............                          [ 39%]
+tests\test_lp_core.py ............                                       [ 55%]
+tests\test_model_io.py ............                                      [ 71%]
+tests\test_model_signature.py .......                                    [ 80%]
+tests\test_numeric_integrity.py .......                                  [ 89%]
+tests\test_plotting_extended.py ....                                     [ 94%]
+tests\test_streamlit_integrity.py ....                                   [100%]
+
+============================== warnings summary ===============================
+.venv\Lib\site-packages\_pytest\cacheprovider.py:469
+  E:\AI\solver-optimizador\.venv\Lib\site-packages\_pytest\cacheprovider.py:469: PytestCacheWarning: could not create cache path E:\AI\solver-optimizador\.pytest_cache\v\cache\nodeids: [WinError 5] Acceso denegado: 'E:\\AI\\solver-optimizador\\.pytest_cache\\v\\cache'
+    config.cache.set("cache/nodeids", sorted(self.cached_nodeids))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 76 passed, 1 warning in 8.66s ========================
+
+COMPILACION
+-----------
+Comando:
+  python -m compileall -q src streamlit_app.py tools/audit
+
+Resultado:
+  Exit code 0; sin salida.
+
+REVISION DE ALCANCE
+-------------------
+  Benchmark A: soluciones x, Z1 y Z2 sin cambios; oraculo exacto PASS.
+  Hidroelectrico: tests directos y lexicograficos conservan Z*=6701.25; PASS.
+  Algoritmo de ponderaciones: sin cambios metodologicos.
+  Deteccion de Pareto: tolerancias y logica sin cambios.
+  Importacion JSON: sin cambios.
+  Graficos: sin cambios.
+  Entrada de restricciones: sin cambios.
+  Backend: continua Pyomo + APPSI HiGHS, sin cambios de configuracion.
+
+TOLERANCIAS NO CORREGIDAS EN ESTA FASE
+--------------------------------------
+La tolerancia fija 1e-4 de deduplicacion y dominancia en multiobjective.py se
+mantiene sin cambios. Es un hallazgo separado y no forma parte de AUD-CRIT-01.
+
+WARNING RELEVANTE
+-----------------
+Pytest no pudo crear .pytest_cache por WinError 5. No afecto la ejecucion ni los
+asserts. No aparecieron fallos ni skips.

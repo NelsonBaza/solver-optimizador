@@ -186,6 +186,7 @@ class LPSolution:
     variable_values: Dict[str, float] = field(default_factory=dict)
     constraint_results: List[ConstraintResult] = field(default_factory=list)
     execution_time_sec: float = 0.0
+    activity_tolerance: float = 1e-6
 
 
 @dataclass

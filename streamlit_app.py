@@ -62,6 +62,20 @@ st.set_page_config(
 )
 
 
+def _format_result_value(value: Optional[float], decimals: int = 4) -> str:
+    """Formatea resultados para UI sin modificar los floats canonicos."""
+
+    if value is None:
+        return "—"
+    numeric_value = float(value)
+    magnitude = abs(numeric_value)
+    if numeric_value != 0.0 and (
+        magnitude < 10 ** (-decimals) or magnitude >= 10 ** (decimals + 3)
+    ):
+        return f"{numeric_value:.6g}"
+    return f"{numeric_value:.{decimals}f}"
+
+
 # ---------------------------------------------------------------------------
 # Inicializacion y Sincronizacion de Estado de Sesion
 # ---------------------------------------------------------------------------
@@ -838,10 +852,10 @@ with tab_res:
                     n_display_vars = min(len(prob.variables), 8)
                     m_cols = st.columns(1 + n_display_vars)
                     with m_cols[0]:
-                        st.metric(label="Valor Optimo Z*", value=f"{sol.objective_value:.4f}")
+                        st.metric(label="Valor Optimo Z*", value=_format_result_value(sol.objective_value))
                     for i, v in enumerate(prob.variables[:n_display_vars]):
                         with m_cols[i + 1]:
-                            st.metric(label=f"{v}*", value=f"{sol.variable_values[v]:.4f}")
+                            st.metric(label=f"{v}*", value=_format_result_value(sol.variable_values[v]))
                     if len(prob.variables) > 8:
                         st.caption(f"*(Mostrando las primeras 8 variables. Todas las {len(prob.variables)} variables se encuentran detalladas en el grafico y la tabla inferior)*")
 
@@ -855,20 +869,20 @@ with tab_res:
                         for cr in sol.constraint_results:
                             con_rows.append({
                                 "Restriccion": cr.name,
-                                "LHS Evaluado": round(cr.lhs, 4),
+                                "LHS Evaluado": cr.lhs,
                                 "Operador": cr.operator,
-                                "RHS": round(cr.rhs, 4),
-                                "Holgura": round(cr.slack, 4),
-                                "Estado": "Activa (0.00)" if cr.is_active else "Con holgura",
+                                "RHS": cr.rhs,
+                                "Holgura": cr.slack,
+                                "Estado": f"Activa (tol={sol.activity_tolerance:g})" if cr.is_active else "Con holgura",
                             })
                         df_res_con = pd.DataFrame(con_rows)
                         st.dataframe(
                             df_res_con,
                             width="stretch",
                             column_config={
-                                "LHS Evaluado": st.column_config.NumberColumn(format="%.4f"),
-                                "RHS": st.column_config.NumberColumn(format="%.4f"),
-                                "Holgura": st.column_config.NumberColumn(format="%.4f"),
+                                "LHS Evaluado": st.column_config.NumberColumn(format="%.6g"),
+                                "RHS": st.column_config.NumberColumn(format="%.6g"),
+                                "Holgura": st.column_config.NumberColumn(format="%.6g"),
                             },
                         )
 
@@ -958,7 +972,14 @@ with tab_res:
                                 "Variables": str(sol.payoff_matrix["opt_Z2"]["x"]),
                             },
                         ]
-                        st.dataframe(pd.DataFrame(pm_data), width="stretch")
+                        st.dataframe(
+                            pd.DataFrame(pm_data),
+                            width="stretch",
+                            column_config={
+                                "Z1": st.column_config.NumberColumn(format="%.6g"),
+                                "Z2": st.column_config.NumberColumn(format="%.6g"),
+                            },
+                        )
 
             else:
                 st.success(f"Evaluacion multiobjetivo completada · {len(sol.weighted_runs)} corridas · Tiempo: {sol.timing.get('total_sec', 0)*1000:.1f} ms")
@@ -982,7 +1003,10 @@ with tab_res:
                     with col_m3:
                         st.metric("Soluciones No Dominadas", n_nd)
                     with col_m4:
-                        st.metric("Rango Delta Z1 / Delta Z2", f"{sol.normalization_ranges['Z1_range']:.1f} / {sol.normalization_ranges['Z2_range']:.1f}")
+                        st.metric(
+                            "Rango Delta Z1 / Delta Z2",
+                            f"{_format_result_value(sol.normalization_ranges['Z1_range'])} / {_format_result_value(sol.normalization_ranges['Z2_range'])}",
+                        )
 
                     col_pm, col_rng = st.columns([1.2, 1.0])
                     with col_pm:
@@ -1014,8 +1038,8 @@ with tab_res:
                                 pd.DataFrame(pm_data),
                                 width="stretch",
                                 column_config={
-                                    "Z1": st.column_config.NumberColumn(format="%.2f"),
-                                    "Z2": st.column_config.NumberColumn(format="%.2f"),
+                                    "Z1": st.column_config.NumberColumn(format="%.6g"),
+                                    "Z2": st.column_config.NumberColumn(format="%.6g"),
                                 },
                             )
 
@@ -1031,9 +1055,9 @@ with tab_res:
                                 pd.DataFrame(r_data),
                                 width="stretch",
                                 column_config={
-                                    "Minimo": st.column_config.NumberColumn(format="%.2f"),
-                                    "Maximo": st.column_config.NumberColumn(format="%.2f"),
-                                    "Rango (Delta Z)": st.column_config.NumberColumn(format="%.2f"),
+                                    "Minimo": st.column_config.NumberColumn(format="%.6g"),
+                                    "Maximo": st.column_config.NumberColumn(format="%.6g"),
+                                    "Rango (Delta Z)": st.column_config.NumberColumn(format="%.6g"),
                                 },
                             )
 
@@ -1067,21 +1091,24 @@ with tab_res:
 
                     df_unique = pd.DataFrame(unique_rows)
                     col_cfg_unique = {
-                        "Z1": st.column_config.NumberColumn(format="%.2f"),
-                        "Z2": st.column_config.NumberColumn(format="%.2f"),
+                        "Z1": st.column_config.NumberColumn(format="%.6g"),
+                        "Z2": st.column_config.NumberColumn(format="%.6g"),
                         "Veces Obtenida": st.column_config.NumberColumn(format="%d"),
                     }
                     for v in prob.variables:
-                        col_cfg_unique[v] = st.column_config.NumberColumn(format="%.2f")
+                        col_cfg_unique[v] = st.column_config.NumberColumn(format="%.6g")
 
                     st.dataframe(df_unique, width="stretch", column_config=col_cfg_unique)
 
                     st.markdown("#### Detalle de Soluciones Repetidas")
                     for u in sol.unique_solutions:
                         with st.container(border=True):
-                            vars_str = ", ".join(f"{v} = {u['x'].get(v, 0.0):.2f}" for v in prob.variables)
+                            vars_str = ", ".join(f"{v} = {_format_result_value(u['x'].get(v, 0.0))}" for v in prob.variables)
                             weights_str = " | ".join(f"α = ({w['alpha1']:.2f}, {w['alpha2']:.2f})" for w in u["generated_by_weights"])
-                            st.markdown(f"**Solucion {u['id']}** ({u['pareto_status']}) · **Z = ({u['Z1']:.2f}, {u['Z2']:.2f})** · {vars_str}")
+                            st.markdown(
+                                f"**Solucion {u['id']}** ({u['pareto_status']}) · "
+                                f"**Z = ({_format_result_value(u['Z1'])}, {_format_result_value(u['Z2'])})** · {vars_str}"
+                            )
                             st.caption(f"Generada por {u['count']} ponderacion(es): {weights_str}")
 
                 # Subtab 3: Tabla de Ponderaciones
@@ -1105,12 +1132,12 @@ with tab_res:
                     col_cfg_sweep = {
                         "alpha1": st.column_config.NumberColumn(format="%.2f"),
                         "alpha2": st.column_config.NumberColumn(format="%.2f"),
-                        "Z1": st.column_config.NumberColumn(format="%.2f"),
-                        "Z2": st.column_config.NumberColumn(format="%.2f"),
-                        "W": st.column_config.NumberColumn(format="%.4f"),
+                        "Z1": st.column_config.NumberColumn(format="%.6g"),
+                        "Z2": st.column_config.NumberColumn(format="%.6g"),
+                        "W": st.column_config.NumberColumn(format="%.6g"),
                     }
                     for v in prob.variables:
-                        col_cfg_sweep[v] = st.column_config.NumberColumn(format="%.2f")
+                        col_cfg_sweep[v] = st.column_config.NumberColumn(format="%.6g")
 
                     st.dataframe(df_sweep, width="stretch", column_config=col_cfg_sweep)
 
@@ -1158,9 +1185,9 @@ with tab_res:
                                 z2_val = opt_data.get("Z2")
                                 st.markdown(f"**Extremo para {name} ({s_obj.sense.value.upper()}):**")
                                 st.markdown(
-                                    f"- Óptimo principal aislado: `{prim_val:.4f}`\n"
+                                    f"- Óptimo principal aislado: `{_format_result_value(prim_val)}`\n"
                                     f"- Desempate lexicográfico aplicado: `{'✅ Sí (múltiples óptimos detectados)' if has_tb else 'ℹ️ No requerido (óptimo único)'}`\n"
-                                    f"- Punto eficiente resultante: $Z_1 = {z1_val:.4f}, \\quad Z_2 = {z2_val:.4f}$"
+                                    f"- Punto eficiente resultante: $Z_1 = {_format_result_value(z1_val)}, \\quad Z_2 = {_format_result_value(z2_val)}$"
                                 )
                     with st.container(border=True):
                         st.subheader("⏱️ Tiempos de Resolucion (Pyomo + HiGHS)")

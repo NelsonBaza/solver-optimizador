@@ -16,6 +16,15 @@ from .lp_models import (
 )
 
 
+def _format_result_value(value: float, decimals: int = 4) -> str:
+    """Formatea una copia para lectura sin alterar el dato canonico."""
+
+    magnitude = abs(value)
+    if value != 0.0 and (magnitude < 10 ** (-decimals) or magnitude >= 10 ** (decimals + 3)):
+        return f"{value:.6g}"
+    return f"{value:.{decimals}f}"
+
+
 def interpret_mono_solution(problem: LPProblem, solution: LPSolution) -> List[str]:
     """
     Genera una lista de observaciones interpretativas para un problema lineal monoobjetivo.
@@ -43,18 +52,23 @@ def interpret_mono_solution(problem: LPProblem, solution: LPSolution) -> List[st
     # 1. Sentido y valor optimo
     sense_str = "maximiza" if problem.objective.sense == Sense.MAXIMIZE else "minimiza"
     bullets.append(
-        f"La solucion encontrada **{sense_str}** la funcion objetivo lineal, alcanzando un valor optimo **$Z^* = {solution.objective_value:.4f}$** dentro de la region factible."
+        f"La solucion encontrada **{sense_str}** la funcion objetivo lineal, alcanzando un valor optimo **$Z^* = {_format_result_value(solution.objective_value)}$** dentro de la region factible."
     )
 
     # 2. Desglose de variables de decision
-    pos_vars = [f"${v}^* = {val:.4f}$" for v, val in solution.variable_values.items() if abs(val) > 1e-6]
-    zero_vars = [f"${v}$" for v, val in solution.variable_values.items() if abs(val) <= 1e-6]
+    pos_vars = [f"${v}^* = {_format_result_value(val)}$" for v, val in solution.variable_values.items() if abs(val) > 1e-6]
+    near_zero_vars = [f"${v}^* = {_format_result_value(val)}$" for v, val in solution.variable_values.items() if abs(val) <= 1e-6]
 
     if pos_vars:
         vars_desc = f"Variables con valor positivo en el optimo: {', '.join(pos_vars)}."
-        if zero_vars:
-            vars_desc += f" Las variables {', '.join(zero_vars)} toman valor cero, indicando que no participan en la combinacion optima bajo las restricciones actuales."
+        if near_zero_vars:
+            vars_desc += f" Variables dentro de la tolerancia numerica de cero: {', '.join(near_zero_vars)}."
         bullets.append(vars_desc)
+    elif near_zero_vars:
+        bullets.append(
+            f"Variables dentro de la tolerancia numerica de cero: {', '.join(near_zero_vars)}. "
+            "Se muestran sus valores canonicos para no ocultar magnitudes pequenas."
+        )
 
     # 3. Restricciones activas (cuellos de botella)
     active_cons = [cr.name for cr in solution.constraint_results if cr.is_active]
@@ -66,7 +80,7 @@ def interpret_mono_solution(problem: LPProblem, solution: LPSolution) -> List[st
         bullets.append("No se detectaron restricciones activas en el optimo (solucion limitada unicamente por no negatividad o cotas).")
 
     # 4. Restricciones con holgura (no limitantes)
-    slack_cons = [f"**{cr.name}** (holgura = {cr.slack:.4f})" for cr in solution.constraint_results if not cr.is_active]
+    slack_cons = [f"**{cr.name}** (holgura = {_format_result_value(cr.slack)})" for cr in solution.constraint_results if not cr.is_active]
     if slack_cons:
         bullets.append(
             f"Restricciones **no limitantes** (con holgura): {', '.join(slack_cons)}. Indican margen o capacidad excedente no utilizada en la solucion actual."
