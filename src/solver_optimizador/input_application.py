@@ -12,6 +12,7 @@ from .constraint_import import (
     validate_variable_names,
 )
 from .model_io import normalize_constraints
+from .indexed_application import mark_indexed_source_stale
 
 
 def _get(state: Any, key: str, default: Any = None) -> Any:
@@ -111,6 +112,7 @@ def apply_variable_import(
         "variable_import_metadata",
         _metadata(source_type, source_metadata, variable_count=len(variables)),
     )
+    mark_indexed_source_stale(state, "variables explicitas modificadas")
     _invalidate_solution(state)
     _next_editor_version(state)
 
@@ -166,6 +168,7 @@ def apply_manual_variable_rename(
         "variable_import_metadata",
         _metadata("manual_editor", None, variable_count=len(new_names)),
     )
+    mark_indexed_source_stale(state, "nombres de variables modificados manualmente")
     _invalidate_solution(state)
     _next_editor_version(state)
 
@@ -222,6 +225,7 @@ def apply_constraint_import(
             nonzero_count=result.nonzero_coefficients,
         ),
     )
+    mark_indexed_source_stale(state, "restricciones explicitas importadas")
     _invalidate_solution(state)
     _next_editor_version(state)
 
@@ -257,5 +261,6 @@ def apply_objective_import(
             recognized_count=len(result.recognized_variables),
         ),
     )
+    mark_indexed_source_stale(state, "objetivo explicito importado")
     _invalidate_solution(state)
     _next_editor_version(state)

@@ -1,0 +1,157 @@
+FASE 3B - MODELADO INDEXADO Y FAMILIAS DE RESTRICCIONES
+Fecha: 2026-09-03 (America/Bogota)
+Repositorio: https://github.com/NelsonBaza/solver-optimizador
+Rama: codex/feature-indexed-model-families
+Commit base: 1908c9238031629736e66ce4c35719192246b7c1
+
+ALCANCE Y ARQUITECTURA
+- Entrada generativa: sets + parametros + familias de variables/objetivos/restricciones.
+- Compilacion: especificacion tipada -> parser AST estatico -> expresiones afines
+  -> variables explicitas + restricciones canonicas dispersas.
+- Destino: problem_builder existente -> Pyomo + APPSI HiGHS.
+- indexed_model.py, indexed_expression.py e indexed_compiler.py no importan
+  Pyomo, HiGHS ni Streamlit.
+- No se integro Gurobi ni se modificaron lp_solver.py o multiobjective.py.
+- Esquema fuente separado: indexed_schema_version = 1.0.
+- Convencion generada: FAMILIA_INDICE (por ejemplo V_3).
+- Aplicacion atomica y estado indexed_source_status synchronized/stale.
+
+CAPACIDADES VALIDADAS
+- Conjuntos enteros, ordenados, inclusivos y unidimensionales.
+- Parametros escalares e indexados finitos, con cobertura exacta del conjunto.
+- Variables indexadas continuas no negativas.
+- Objetivos monoobjetivo y biobjetivo con terminos estructurados.
+- Familias con rangos parciales y referencias t, t-1, t+1 y otros offsets enteros.
+- Operadores <=, >= y =.
+- Coeficientes numericos/parametricos, suma, resta, producto escalar,
+  division por constante y parentesis.
+- Provenance de variables y restricciones generadas.
+- Vista previa limitada a 20 sin truncar el modelo aplicado.
+- Importacion/exportacion JSON de la especificacion indexada.
+
+SEGURIDAD DEL PARSER
+Rechazado: llamadas, acceso a atributos, importacion dinamica, apertura de
+archivos, producto variable-variable, potencias y division por variable.
+No se usan mecanismos de ejecucion dinamica para interpretar expresiones.
+
+PRUEBA DE ESCALA
+Comando: python tools/audit/verify_indexed_model_scaling.py
+set_size=1000
+variable_families=3
+generated_variables=3000
+constraint_families=5
+generated_constraints=5000
+nonzeros=7000
+density=0.00046667
+RESULT: PASS (indexed model scaling contract satisfied)
+
+HIDROELECTRICO EXPLICITO VS INDEXADO
+Comando: python tools/audit/verify_indexed_hydroelectric_equivalence.py
+explicit_status=optimal
+indexed_status=optimal
+explicit_objective=6701.25
+indexed_objective=6701.25
+generated_variables=24
+generated_constraints=28
+nonzeros=51
+max_residual_difference=0
+RESULT: PASS (indexed hydroelectric fixture equivalence satisfied)
+Limitacion: equivalencia con fixture vigente; no certifica fidelidad fisica al
+enunciado fuente.
+
+MODELO BIOBJETIVO INDEXADO
+- tests/test_indexed_compiler.py::test_i25_biobjective_indexed_model_uses_existing_weighted_solver
+- Resultado: PASS.
+- Para cada weighted run, Z1 y Z2 se reconstruyen desde x, y
+  W = alpha1*N1 + alpha2*N2.
+
+SEGURIDAD REPRODUCIBLE
+Comando: python tools/audit/verify_indexed_expression_safety.py
+Rechazados: eval(...), exec(...), __import__(...), open(...), acceso a atributo,
+llamadas, X[t]*Y[t] y X[t]**2.
+Aceptados: 2*X[t], cost[t]*X[t], X[t]/3600 y X[t]-X[t-1].
+RESULT: PASS (indexed expression safety contract satisfied)
+
+STREAMLIT APPTEST
+Comando: python tools/audit/verify_streamlit_indexed_model.py
+set=T=1..10
+variable_families=2
+generated_variables=20
+constraint_families=2
+generated_constraints=20
+preview_limit=20
+applied_constraints=20
+solver_status=optimal
+RESULT: PASS (Streamlit indexed model flow satisfied)
+
+REGRESIONES FASE 3A / 3A.1
+- verify_scalable_input_hardening.py: PASS.
+  0<=10 optimal; 0>=10 infeasible; 0=0 optimal; 0=10 infeasible;
+  proyeccion coefficients={} resoluble; nombres reservados rechazados.
+- verify_scalable_constraint_input.py: PASS.
+  100 variables; 500 restricciones; 900 no ceros; objective_value=1000.
+- verify_streamlit_scalable_input.py: PASS.
+  TSV 50, CSV 100, XLSX 100 y formato disperso 300; modelo completo resuelto.
+
+REGRESIONES FASE 2A / 2B
+- verify_numeric_integrity.py: PASS; x publicado=1e-9, objetivo=1, LHS=1.
+- verify_weighted_method_exact.py: PASS; oraculo exacto Benchmark A.
+- verify_weighted_method_production.py: PASS; Benchmark A conserva
+  (0,130), (80,50), (100,0) para los pesos correspondientes.
+- Hidroelectrico monoobjetivo conserva Z*=6701.25.
+
+PYTEST COMPLETO
+Comando: python -m pytest -ra -W default
+Python: 3.13.1
+pytest: 9.1.1
+collected: 193
+PASS: 193
+FAIL: 0
+SKIP: 0
+Tiempo: 10.87 s
+Warning: PytestCacheWarning por permiso denegado al crear .pytest_cache; no
+afecta la ejecucion ni los resultados.
+
+COMPILACION
+Comando: python -m compileall -q src streamlit_app.py tools/audit
+Resultado: PASS.
+
+REVISION ESTATICA
+- Sin coincidencias de ejecucion dinamica, subprocess u os.system en los nuevos
+  modulos indexed_*.py.
+- Sin imports Pyomo, HiGHS o Streamlit en indexed_model.py,
+  indexed_expression.py o indexed_compiler.py.
+- git diff --check: PASS; solo advertencias informativas LF/CRLF de Git.
+
+WARNINGS RELEVANTES
+- Streamlit AppTest en modo bare informa missing ScriptRunContext; esperado para
+  el harness y sin excepciones de la aplicacion.
+- El verificador heredado de entrada escalable emite warnings de tight_layout en
+  plotting.py para algunos modelos grandes; fuera del alcance de Fase 3B.
+- AUD-HIGH-06 permanece ABIERTO; solo se mantiene la salvaguarda temporal de
+  nombres reservados y no se implementan IDs internos.
+
+ARCHIVOS CREADOS
+- docs/MODELADO_INDEXADO.md
+- docs/audit_evidence/indexed_model_families_validation.txt
+- src/solver_optimizador/indexed_application.py
+- src/solver_optimizador/indexed_compiler.py
+- src/solver_optimizador/indexed_examples.py
+- src/solver_optimizador/indexed_expression.py
+- src/solver_optimizador/indexed_model.py
+- src/solver_optimizador/indexed_text_io.py
+- tests/test_indexed_compiler.py
+- tests/test_indexed_model.py
+- tests/test_streamlit_indexed_model.py
+- tools/audit/verify_indexed_expression_safety.py
+- tools/audit/verify_indexed_hydroelectric_equivalence.py
+- tools/audit/verify_indexed_model_scaling.py
+- tools/audit/verify_streamlit_indexed_model.py
+
+ARCHIVOS MODIFICADOS
+- README.md
+- docs/AUDITORIA_TECNICA_MATEMATICA.md
+- docs/ENTRADA_ESCALABLE_MODELOS.md
+- src/solver_optimizador/__init__.py
+- src/solver_optimizador/input_application.py
+- streamlit_app.py

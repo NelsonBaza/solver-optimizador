@@ -66,6 +66,20 @@ from solver_optimizador.input_application import (
     apply_objective_import,
     apply_variable_import,
 )
+from solver_optimizador.indexed_application import (
+    apply_indexed_model,
+    mark_indexed_source_stale,
+)
+from solver_optimizador.indexed_compiler import compile_indexed_model
+from solver_optimizador.indexed_examples import production_planning_example_spec
+from solver_optimizador.indexed_model import (
+    deserialize_indexed_model_spec,
+    serialize_indexed_model_spec,
+)
+from solver_optimizador.indexed_text_io import (
+    indexed_spec_to_table_texts,
+    parse_indexed_tables,
+)
 from solver_optimizador.plotting import (
     plot_feasible_region_2d,
     plot_objective_space_2d,
@@ -235,6 +249,157 @@ def _render_apply_import_controls(
             st.error(str(exc), icon=":material/error:")
 
 
+def _load_indexed_example_tables() -> None:
+    spec = production_planning_example_spec()
+    tables = indexed_spec_to_table_texts(spec)
+    st.session_state.indexed_model_name = spec.name
+    st.session_state.indexed_model_description = spec.description
+    for key, value in tables.items():
+        st.session_state[f"indexed_{key}_text"] = value
+    st.session_state.indexed_compile_preview = None
+
+
+def _render_indexed_modeling() -> None:
+    """Flujo fuente -> validar/compilar -> previsualizar -> aplicar."""
+
+    with st.container(border=True):
+        st.subheader("Modelo indexado / Familias")
+        st.caption(
+            "Defina reglas unidimensionales; la compilacion genera el modelo explicito "
+            "disperso sin invocar Pyomo ni el solver."
+        )
+        if st.session_state.indexed_source_status == "synchronized":
+            st.success("La especificacion indexada aplicada esta sincronizada con el modelo explicito.")
+        elif st.session_state.indexed_source_status == "stale":
+            st.warning(
+                "La especificacion indexada quedo desactualizada por una edicion explicita. "
+                "Valide y aplique de nuevo para sincronizarla."
+            )
+
+        if st.button("Cargar ejemplo academico de 6 periodos", icon=":material/science:"):
+            _load_indexed_example_tables()
+            st.rerun()
+
+        uploaded_spec = st.file_uploader(
+            "Importar especificacion indexada JSON",
+            type=["json"],
+            key="indexed_spec_uploader",
+            max_upload_size=5,
+        )
+        if uploaded_spec is not None and st.button("Cargar JSON indexado"):
+            try:
+                spec = deserialize_indexed_model_spec(uploaded_spec.getvalue().decode("utf-8-sig"))
+                tables = indexed_spec_to_table_texts(spec)
+                st.session_state.indexed_model_name = spec.name
+                st.session_state.indexed_model_description = spec.description
+                for key, value in tables.items():
+                    st.session_state[f"indexed_{key}_text"] = value
+                st.session_state.indexed_compile_preview = None
+                st.rerun()
+            except (UnicodeDecodeError, ValueError) as exc:
+                st.error(str(exc), icon=":material/error:")
+
+        col_name, col_description = st.columns(2)
+        with col_name:
+            st.text_input("Nombre del modelo indexado", key="indexed_model_name")
+        with col_description:
+            st.text_input("Descripcion del modelo indexado", key="indexed_model_description")
+
+        st.markdown("**Paso 1 · Definir conjuntos, parámetros y familias**")
+        st.text_area(
+            "Conjuntos (name,start,end)", key="indexed_sets_text", height=105,
+            help="Los limites enteros son inclusivos; por ejemplo T,1,24.",
+        )
+        col_scalar, col_parameter = st.columns(2)
+        with col_scalar:
+            st.text_area(
+                "Parámetros escalares (name,value)", key="indexed_scalars_text", height=145
+            )
+        with col_parameter:
+            indexed_parameter_file = st.file_uploader(
+                "Parámetros indexados desde CSV",
+                type=["csv"],
+                key="indexed_parameters_file",
+                max_upload_size=10,
+            )
+            st.text_area(
+                "Parámetros indexados (parameter,index_set,index,value)",
+                key="indexed_indexed_text",
+                height=105,
+            )
+        st.text_area(
+            "Familias de variables (family,index_set)",
+            key="indexed_variables_text",
+            height=120,
+        )
+        st.text_area(
+            "Objetivos indexados (objective,sense,variable_family,index_set,start_index,end_index,coefficient)",
+            key="indexed_objectives_text",
+            height=140,
+        )
+        st.text_area(
+            "Familias de restricciones (name,index_set,index_symbol,start_index,end_index,expression)",
+            key="indexed_constraints_text",
+            height=190,
+        )
+
+        st.markdown("**Paso 2 · Validar y compilar vista previa**")
+        if st.button("Validar y compilar modelo indexado", type="primary", icon=":material/rule:"):
+            try:
+                indexed_parameter_text = st.session_state.indexed_indexed_text
+                if indexed_parameter_file is not None:
+                    indexed_parameter_text = indexed_parameter_file.getvalue().decode("utf-8-sig")
+                spec = parse_indexed_tables(
+                    name=st.session_state.indexed_model_name,
+                    description=st.session_state.indexed_model_description,
+                    sets_text=st.session_state.indexed_sets_text,
+                    scalar_parameters_text=st.session_state.indexed_scalars_text,
+                    indexed_parameters_text=indexed_parameter_text,
+                    variable_families_text=st.session_state.indexed_variables_text,
+                    objectives_text=st.session_state.indexed_objectives_text,
+                    constraint_families_text=st.session_state.indexed_constraints_text,
+                )
+                st.session_state.indexed_compile_preview = compile_indexed_model(spec)
+            except (UnicodeDecodeError, ValueError) as exc:
+                st.session_state.indexed_compile_preview = None
+                st.error(str(exc), icon=":material/error:")
+
+        preview = st.session_state.indexed_compile_preview
+        if preview is not None:
+            stats = preview.statistics
+            st.success("Especificacion valida y compilada sin modificar el modelo actual.")
+            with st.container(horizontal=True):
+                st.metric("Conjuntos", stats["sets"])
+                st.metric("Parámetros", stats["parameters"])
+                st.metric("Familias variables", stats["variable_families"])
+                st.metric("Variables generadas", stats["generated_variables"])
+                st.metric("Familias restricciones", stats["constraint_families"])
+                st.metric("Restricciones generadas", stats["generated_constraints"])
+                st.metric("Coeficientes no nulos", stats["nonzero_coefficients"])
+            variable_rows = [preview.variable_provenance[name] for name in preview.variables[:20]]
+            st.dataframe(pd.DataFrame(variable_rows), hide_index=True, width="stretch")
+            constraint_rows = _constraint_preview_rows(list(preview.constraints))[:20]
+            st.dataframe(pd.DataFrame(constraint_rows), hide_index=True, width="stretch")
+            st.caption(
+                f"Vista previa: {len(constraint_rows)} de "
+                f"{stats['generated_constraints']} restricciones generadas."
+            )
+            st.download_button(
+                "Descargar especificacion indexada JSON",
+                data=serialize_indexed_model_spec(preview.source_spec),
+                file_name="modelo_indexado.json",
+                mime="application/json",
+            )
+            st.markdown("**Paso 3 · Aplicar al modelo explícito actual**")
+            if st.button("Aplicar modelo indexado", type="primary", icon=":material/check_circle:"):
+                applied = apply_indexed_model(st.session_state, preview)
+                st.session_state.example_msg = (
+                    f"{applied.statistics['generated_variables']} variables y "
+                    f"{applied.statistics['generated_constraints']} restricciones generadas y aplicadas."
+                )
+                st.rerun()
+
+
 # ---------------------------------------------------------------------------
 # Inicializacion y Sincronizacion de Estado de Sesion
 # ---------------------------------------------------------------------------
@@ -300,6 +465,33 @@ def _init_session_state():
         st.session_state.objective_import_metadata = None
     if "variable_import_metadata" not in st.session_state:
         st.session_state.variable_import_metadata = None
+    if "formulation_route" not in st.session_state:
+        st.session_state.formulation_route = "Formulación explícita"
+    if "indexed_compile_preview" not in st.session_state:
+        st.session_state.indexed_compile_preview = None
+    if "indexed_source_spec" not in st.session_state:
+        st.session_state.indexed_source_spec = None
+    if "indexed_source_status" not in st.session_state:
+        st.session_state.indexed_source_status = None
+    if "indexed_model_metadata" not in st.session_state:
+        st.session_state.indexed_model_metadata = None
+    indexed_defaults = {
+        "indexed_model_name": "Modelo indexado",
+        "indexed_model_description": "",
+        "indexed_sets_text": "name,start,end\nT,1,6",
+        "indexed_scalars_text": "name,value",
+        "indexed_indexed_text": "parameter,index_set,index,value",
+        "indexed_variables_text": "family,index_set",
+        "indexed_objectives_text": (
+            "objective,sense,variable_family,index_set,start_index,end_index,coefficient"
+        ),
+        "indexed_constraints_text": (
+            "name,index_set,index_symbol,start_index,end_index,expression"
+        ),
+    }
+    for key, value in indexed_defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
 def _clear_widget_keys(state=None):
@@ -309,6 +501,13 @@ def _clear_widget_keys(state=None):
     inicializados deterministicamente desde `session_state`.
     """
     pass
+
+
+def _clear_indexed_source(state) -> None:
+    state.indexed_source_spec = None
+    state.indexed_source_status = None
+    state.indexed_model_metadata = None
+    state.indexed_compile_preview = None
 
 
 def _new_model(state=None):
@@ -340,6 +539,7 @@ def _new_model(state=None):
     state.constraint_import_metadata = None
     state.objective_import_metadata = None
     state.variable_import_metadata = None
+    _clear_indexed_source(state)
     state.example_msg = "Nuevo modelo en blanco iniciado."
 
 
@@ -388,6 +588,7 @@ def _load_model_dict(data: Dict[str, Any], state=None):
         "constraint_count": len(data["constraints_data"]),
         "variable_count": len(data["var_names"]),
     }
+    _clear_indexed_source(state)
 
     n_v = data["num_vars"]
     n_c = len(data["constraints_data"])
@@ -416,6 +617,7 @@ def _load_example_mono():
     st.session_state.last_solution_problem = None
     st.session_state.last_solution_signature = None
     st.session_state.constraint_import_metadata = {"source_type": "example", "constraint_count": 3, "variable_count": 2}
+    _clear_indexed_source(st.session_state)
     st.session_state.example_msg = "Ejemplo 1 (Monoobjetivo) cargado exitosamente."
 
 
@@ -442,6 +644,7 @@ def _load_example_bio():
     st.session_state.last_solution_problem = None
     st.session_state.last_solution_signature = None
     st.session_state.constraint_import_metadata = {"source_type": "example", "constraint_count": 2, "variable_count": 2}
+    _clear_indexed_source(st.session_state)
     st.session_state.example_msg = "Benchmark A (Biobjetivo) cargado exitosamente."
 
 
@@ -525,6 +728,8 @@ with st.sidebar:
             index=prob_type_index,
             key=f"radio_prob_type_{st.session_state.editor_version}",
         )
+        if prob_type != st.session_state.problem_type:
+            mark_indexed_source_stale(st.session_state, "tipo de problema explicito modificado")
         st.session_state.problem_type = prob_type
 
         st.subheader("2. Variables de Decision")
@@ -682,6 +887,20 @@ tab_form, tab_res = st.tabs(["📝 1. Formulacion del Modelo", "📊 2. Resultad
 # PESTAÑA 1: FORMULACION DEL MODELO
 # ===========================================================================
 with tab_form:
+    formulation_route = st.segmented_control(
+        "Ruta de formulación",
+        ["Formulación explícita", "Modelo indexado"],
+        key="formulation_route",
+        required=True,
+        width="stretch",
+    )
+    if formulation_route == "Modelo indexado":
+        _render_indexed_modeling()
+        st.info(
+            "La sección inferior muestra la representación explícita actual. Si la modifica "
+            "después de aplicar, la fuente indexada se marcará como desactualizada."
+        )
+
     col_left, col_right = st.columns([1.1, 1.3])
 
     # -----------------------------------------------------------------------
@@ -702,6 +921,10 @@ with tab_form:
                         index=sense_idx,
                         key=f"mono_sense_select_{st.session_state.editor_version}",
                     )
+                    if sense_str != st.session_state.obj_sense:
+                        mark_indexed_source_stale(
+                            st.session_state, "sentido del objetivo explicito modificado"
+                        )
                     st.session_state.obj_sense = sense_str
 
                 st.markdown("**Coeficientes lineales del objetivo:**")
@@ -730,10 +953,15 @@ with tab_form:
                         },
                         key=f"mono_obj_editor_{st.session_state.editor_version}",
                     )
-                    st.session_state.obj_coeffs = {
+                    edited_coefficients = {
                         str(row["Variable"]): float(row["Coeficiente"])
                         for _, row in edited_obj_df.iterrows()
                     }
+                    if edited_coefficients != st.session_state.obj_coeffs:
+                        mark_indexed_source_stale(
+                            st.session_state, "coeficientes del objetivo explicito modificados"
+                        )
+                    st.session_state.obj_coeffs = edited_coefficients
                 else:
                     st.info(
                         "La tabla de coeficientes esta deshabilitada para este tamano. "
@@ -750,6 +978,10 @@ with tab_form:
                         index=sense1_idx,
                         key=f"bio_sense1_select_{st.session_state.editor_version}",
                     )
+                    if sense1_str != st.session_state.obj1_sense:
+                        mark_indexed_source_stale(
+                            st.session_state, "sentido de Z1 explicito modificado"
+                        )
                     st.session_state.obj1_sense = sense1_str
                 with col_s2:
                     sense2_idx = 0 if st.session_state.obj2_sense == "Maximizar" else 1
@@ -759,6 +991,10 @@ with tab_form:
                         index=sense2_idx,
                         key=f"bio_sense2_select_{st.session_state.editor_version}",
                     )
+                    if sense2_str != st.session_state.obj2_sense:
+                        mark_indexed_source_stale(
+                            st.session_state, "sentido de Z2 explicito modificado"
+                        )
                     st.session_state.obj2_sense = sense2_str
 
                 st.markdown("**Coeficientes de ambos objetivos:**")
@@ -797,14 +1033,23 @@ with tab_form:
                         },
                         key=f"bio_obj_editor_{st.session_state.editor_version}",
                     )
-                    st.session_state.obj1_coeffs = {
+                    edited_coefficients_z1 = {
                         str(row["Variable"]): float(row["Coeficiente Z1"])
                         for _, row in edited_bio_df.iterrows()
                     }
-                    st.session_state.obj2_coeffs = {
+                    edited_coefficients_z2 = {
                         str(row["Variable"]): float(row["Coeficiente Z2"])
                         for _, row in edited_bio_df.iterrows()
                     }
+                    if (
+                        edited_coefficients_z1 != st.session_state.obj1_coeffs
+                        or edited_coefficients_z2 != st.session_state.obj2_coeffs
+                    ):
+                        mark_indexed_source_stale(
+                            st.session_state, "coeficientes biobjetivo explicitos modificados"
+                        )
+                    st.session_state.obj1_coeffs = edited_coefficients_z1
+                    st.session_state.obj2_coeffs = edited_coefficients_z2
                 else:
                     st.info(
                         "Las tablas de objetivos estan deshabilitadas para este tamano. "

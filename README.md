@@ -64,6 +64,19 @@ Solo se muestran las primeras 20 restricciones en las vistas previas; el modelo
 completo se conserva y se envía al builder. Consulte
 [`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md).
 
+### Modelos indexados y multiperiodo
+
+La ruta **Modelo indexado / Familias** permite definir rangos enteros, parámetros
+escalares o por período, familias de variables, objetivos estructurados y
+familias de restricciones. Por ejemplo, `T=1..1000` y cinco reglas generan unas
+5.000 restricciones explícitas sin escribirlas una por una.
+
+Las referencias `t-1` y `t+1` se validan contra los límites, las expresiones no
+lineales o ejecutables se rechazan y la expansión conserva coeficientes
+dispersos y procedencia. La vista previa no modifica el modelo; **Aplicar modelo
+indexado** reemplaza el estado explícito de forma atómica. Consulte
+[`docs/MODELADO_INDEXADO.md`](docs/MODELADO_INDEXADO.md).
+
 ### Qué Todavía NO Puede Resolver (Limitaciones Actuales):
 * Variables enteras o binarias (MILP).
 * Problemas no lineales continuos o enteros (NLP / MINLP).
@@ -86,6 +99,10 @@ solver-optimizador/
 │       ├── multiobjective.py     # Motor multiobjetivo (matriz de pagos, pesos, Pareto)
 │       ├── constraint_import.py  # Parseo tabular ancho/disperso y XLSX solver-agnostic
 │       ├── input_application.py  # Aplicacion atomica de lotes a estado
+│       ├── indexed_model.py      # Especificacion indexada serializable
+│       ├── indexed_expression.py # Parser lineal estatico y seguro
+│       ├── indexed_compiler.py   # Expansion solver-agnostic a forma canonica
+│       ├── indexed_application.py# Aplicacion atomica y control de fuente
 │       └── plotting.py           # Visualización 2D (region factible y espacio de objetivos)
 │
 ├── streamlit_app.py              # Interfaz de usuario en Streamlit
@@ -120,6 +137,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/DECISIONS.md`](docs/DECISIONS.md): Registro histórico de decisiones arquitectónicas (ADR-001 a ADR-007).
 * [`docs/METODO_PONDERACIONES.md`](docs/METODO_PONDERACIONES.md): Especificación matemática normativa de la suma ponderada normalizada.
 * [`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md): Formatos ancho/disperso, CSV/XLSX y aplicación atómica de modelos grandes.
+* [`docs/MODELADO_INDEXADO.md`](docs/MODELADO_INDEXADO.md): Conjuntos, parámetros, familias, sintaxis segura, expansión y trazabilidad.
 * [`docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`](docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md): Documento histórico sobre la selección secundaria de anclas; no define el método vigente.
 * [`docs/END_TO_END_JSON_STREAMLIT_SOLVER_AUDIT.md`](docs/END_TO_END_JSON_STREAMLIT_SOLVER_AUDIT.md): Auditoría de sincronización de modelos entre UI y solver.
 * [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](docs/BENCHMARK_A_BACKEND_COMPARISON.md): Comparativa exhaustiva Pyomo vs. AMPL.

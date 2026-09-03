@@ -1,6 +1,6 @@
 # Entrada escalable de modelos lineales
 
-**Vigencia:** Fase 3A
+**Vigencia:** Fases 3A, 3A.1 y 3B
 
 **Backend actual:** Pyomo + APPSI HiGHS
 
@@ -189,10 +189,26 @@ El botón “Descargar restricciones CSV” produce formato disperso para permit
 el ciclo importar → editar externamente → volver a importar sin pérdida
 matemática.
 
-## Punto de extensión para Fase 3B
+## 11. Entrada generativa mediante familias
 
-`import_constraint_table(headers, rows, ...)` es el límite de integración. Una
-futura expansión de conjuntos, parámetros y familias indexadas deberá generar
-filas explícitas y entregarlas a ese contrato, obteniendo exactamente las mismas
-restricciones canónicas que CSV, XLSX, matriz dispersa o modo manual. Esta fase
-no implementa `sets`, `forall`, `prev(t)` ni un AST de expresiones.
+Ahora existen dos rutas complementarias:
+
+```text
+entrada explícita: manual / CSV / XLSX / matriz dispersa
+entrada generativa: conjuntos / parámetros / familias de variables y restricciones
+                                  ↓
+                    representación canónica explícita dispersa
+                                  ↓
+                       problem_builder / Pyomo / HiGHS
+```
+
+Una definición `T=1..1000` y cinco familias genera aproximadamente 5.000
+restricciones sin construir un CSV de 5.000 filas. El compilador indexado es
+solver-agnostic y conserva procedencia familia/índice. La especificación fuente
+se guarda en un JSON indexado separado y se aplica atómicamente; una edición
+explícita posterior la marca como `stale` para evitar dos fuentes de verdad.
+
+Consulte [MODELADO_INDEXADO.md](MODELADO_INDEXADO.md) para la sintaxis lineal,
+los desplazamientos `t-1`/`t+1`, objetivos estructurados, seguridad y límites.
+El backend continúa siendo Pyomo + APPSI HiGHS. La representación canónica
+podrá alimentar un futuro adaptador Gurobi, pero esta fase no lo implementa.
