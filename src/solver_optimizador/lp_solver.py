@@ -52,7 +52,10 @@ def solve_lp(problem: LPProblem, tol: float = 1e-6) -> LPSolution:
 
     # Restricciones
     for i, c in enumerate(problem.constraints):
-        expr = sum(c.coefficients.get(v, 0.0) * var_dict[v] for v in problem.variables)
+        expr = sum(
+            coefficient * var_dict[variable_name]
+            for variable_name, coefficient in c.coefficients.items()
+        )
         if c.operator == Operator.LE:
             con_obj = pyo.Constraint(expr=expr <= c.rhs)
         elif c.operator == Operator.GE:

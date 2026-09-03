@@ -203,8 +203,8 @@ def _add_original_model(
 
     for index, constraint in enumerate(problem.constraints):
         expression = sum(
-            constraint.coefficients.get(variable_name, 0.0) * var_dict[variable_name]
-            for variable_name in problem.variables
+            coefficient * var_dict[variable_name]
+            for variable_name, coefficient in constraint.coefficients.items()
         )
         if constraint.operator == Operator.LE:
             pyomo_constraint = pyo.Constraint(expr=expression <= constraint.rhs)

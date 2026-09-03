@@ -39,6 +39,31 @@ La aplicación se abrirá automáticamente en su navegador en:
   * **Ejemplo 1 (Monoobjetivo):** $\text{MAX } Z = 3x_1 + 2x_2$, s.a. $x_1 + x_2 \le 4, x_1 \le 2, x_2 \le 3 \implies (x^*=(2,2), Z^*=10)$.
   * **Ejemplo 2 (Benchmark A Biobjetivo):** $\text{MAX } Z_1 = 10x_1 + 3x_2, \text{MAX } Z_2 = 0.8x_1 + 1.3x_2$, s.a. $x_1 + x_2 \le 130, 2.5x_1 + x_2 \le 250 \implies 3$ soluciones únicas no dominadas: $A(0,130), B(80,50), C(100,0)$.
 
+### Entrada de modelos grandes
+
+El editor manual se conserva para modelos pequeños. Para modelos con decenas o
+cientos de restricciones, la aplicación permite:
+
+- pegar tablas anchas desde Excel o Google Sheets usando tabulador, coma o punto y coma;
+- importar CSV UTF-8/UTF-8-SIG y seleccionar hojas de archivos XLSX sin macros;
+- importar matrices dispersas en formato `constraint,variable,coefficient,operator,rhs`;
+- declarar nombres de variables en bloque;
+- pegar o importar coeficientes de objetivos monoobjetivo y biobjetivo;
+- validar y previsualizar antes de aplicar el lote de forma atómica;
+- descargar las restricciones vigentes como CSV disperso.
+
+Ejemplo ancho:
+
+```csv
+name,x1,x2,operator,rhs
+R1,1,1,<=,130
+R2,2.5,1,<=,250
+```
+
+Solo se muestran las primeras 20 restricciones en las vistas previas; el modelo
+completo se conserva y se envía al builder. Consulte
+[`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md).
+
 ### Qué Todavía NO Puede Resolver (Limitaciones Actuales):
 * Variables enteras o binarias (MILP).
 * Problemas no lineales continuos o enteros (NLP / MINLP).
@@ -59,6 +84,8 @@ solver-optimizador/
 │       ├── lp_models.py          # Estructuras de datos (Problem, Objective, Constraint, Solution)
 │       ├── lp_solver.py          # Motor LP monoobjetivo (Pyomo + APPSI HiGHS)
 │       ├── multiobjective.py     # Motor multiobjetivo (matriz de pagos, pesos, Pareto)
+│       ├── constraint_import.py  # Parseo tabular ancho/disperso y XLSX solver-agnostic
+│       ├── input_application.py  # Aplicacion atomica de lotes a estado
 │       └── plotting.py           # Visualización 2D (region factible y espacio de objetivos)
 │
 ├── streamlit_app.py              # Interfaz de usuario en Streamlit
@@ -92,6 +119,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/STATUS.md`](docs/STATUS.md): Fotografía técnica del estado actual del proyecto.
 * [`docs/DECISIONS.md`](docs/DECISIONS.md): Registro histórico de decisiones arquitectónicas (ADR-001 a ADR-007).
 * [`docs/METODO_PONDERACIONES.md`](docs/METODO_PONDERACIONES.md): Especificación matemática normativa de la suma ponderada normalizada.
+* [`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md): Formatos ancho/disperso, CSV/XLSX y aplicación atómica de modelos grandes.
 * [`docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`](docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md): Documento histórico sobre la selección secundaria de anclas; no define el método vigente.
 * [`docs/END_TO_END_JSON_STREAMLIT_SOLVER_AUDIT.md`](docs/END_TO_END_JSON_STREAMLIT_SOLVER_AUDIT.md): Auditoría de sincronización de modelos entre UI y solver.
 * [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](docs/BENCHMARK_A_BACKEND_COMPARISON.md): Comparativa exhaustiva Pyomo vs. AMPL.

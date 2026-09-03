@@ -1,12 +1,13 @@
 """
 Aplicacion Web Streamlit — Suite de Optimizacion Matematica (MVP LP).
 Formulacion, resolucion, persistencia y analisis de Programacion Lineal Continua (Monoobjetivo y Biobjetivo).
-Soporta hasta 100 variables, nombres personalizados, persistencia JSON y carga atomica sincronizada.
+Soporta entrada manual acotada e importacion masiva dispersa, persistencia JSON
+y carga atomica sincronizada.
 Backend matematico: Pyomo + HiGHS (APPSI).
 """
 
-import sys
 import os
+import sys
 from typing import List, Dict, Any, Optional
 
 # Asegurar que el directorio src este en sys.path
@@ -45,6 +46,24 @@ from solver_optimizador.problem_builder import (
     build_lp_problem_from_state,
     build_biobjective_problem_from_state,
 )
+from solver_optimizador.constraint_import import (
+    ConstraintImportResult,
+    constraint_template_sparse,
+    constraint_template_wide,
+    constraints_to_sparse_csv,
+    list_xlsx_sheets,
+    objective_template_bi,
+    objective_template_mono,
+    parse_constraint_text,
+    parse_objective_text,
+    parse_variable_names,
+    parse_xlsx_constraints,
+)
+from solver_optimizador.input_application import (
+    apply_constraint_import,
+    apply_objective_import,
+    apply_variable_import,
+)
 from solver_optimizador.plotting import (
     plot_feasible_region_2d,
     plot_objective_space_2d,
@@ -74,6 +93,144 @@ def _format_result_value(value: Optional[float], decimals: int = 4) -> str:
     ):
         return f"{numeric_value:.6g}"
     return f"{numeric_value:.{decimals}f}"
+
+
+MANUAL_VARIABLE_EDITOR_LIMIT = 100
+MANUAL_CONSTRAINT_ROW_LIMIT = 100
+MANUAL_CONSTRAINT_CELL_LIMIT = 2_000
+IMPORT_PREVIEW_LIMIT = 20
+
+
+@st.cache_data(max_entries=10, show_spinner=False)
+def _cached_xlsx_sheets(data: bytes) -> List[str]:
+    return list_xlsx_sheets(data)
+
+
+@st.cache_data(max_entries=10, show_spinner=False)
+def _cached_xlsx_constraints(
+    data: bytes,
+    sheet_name: str,
+    decimal_separator: str,
+) -> ConstraintImportResult:
+    return parse_xlsx_constraints(
+        data,
+        sheet_name=sheet_name,
+        input_format="auto",
+        decimal_separator=decimal_separator,
+    )
+
+
+def _canonical_to_flat_rows(
+    constraints: List[Dict[str, Any]], variable_names: List[str]
+) -> List[Dict[str, Any]]:
+    """Crea solo la copia densa necesaria para el editor manual pequeno."""
+
+    rows: List[Dict[str, Any]] = []
+    for index, constraint in enumerate(constraints):
+        coefficients = constraint.get("coefficients", {})
+        row = {
+            "Nombre": constraint.get("name", f"Restriccion {index + 1}"),
+            "Operador": constraint.get("operator", "<="),
+            "RHS": float(constraint.get("rhs", 0.0)),
+        }
+        for variable in variable_names:
+            row[variable] = float(
+                coefficients.get(variable, constraint.get(variable, 0.0))
+                if isinstance(coefficients, dict)
+                else constraint.get(variable, 0.0)
+            )
+        rows.append(row)
+    return rows
+
+
+def _constraint_preview_rows(
+    constraints: List[Dict[str, Any]], search: str = ""
+) -> List[Dict[str, Any]]:
+    needle = search.strip().lower()
+    preview: List[Dict[str, Any]] = []
+    for constraint in constraints:
+        if needle and needle not in str(constraint["name"]).lower():
+            continue
+        terms = list(constraint["coefficients"].items())
+        expression = " + ".join(
+            f"{coefficient:g}*{variable}" for variable, coefficient in terms[:8]
+        ).replace("+ -", "- ")
+        if len(terms) > 8:
+            expression += f" + ... ({len(terms)} terminos)"
+        preview.append(
+            {
+                "Restriccion": constraint["name"],
+                "LHS disperso": expression or "0",
+                "Operador": constraint["operator"],
+                "RHS": constraint["rhs"],
+            }
+        )
+    return preview
+
+
+def _render_constraint_import_preview(result: ConstraintImportResult, key: str) -> None:
+    for error in result.errors:
+        st.error(error, icon=":material/error:")
+    for warning in result.warnings:
+        st.warning(warning, icon=":material/warning:")
+    if not result.constraints:
+        return
+    with st.container(horizontal=True):
+        st.metric("Variables detectadas", result.number_of_variables)
+        st.metric("Restricciones", result.number_of_constraints)
+        st.metric("Coeficientes no nulos", result.nonzero_coefficients)
+        st.metric("Densidad estimada", f"{100 * result.density:.2f} %")
+    search = st.text_input(
+        "Filtrar vista previa por nombre",
+        key=f"{key}_search",
+        placeholder="Ejemplo: Balance_H",
+    )
+    matching = _constraint_preview_rows(result.constraints, search)
+    shown = matching[:IMPORT_PREVIEW_LIMIT]
+    st.dataframe(pd.DataFrame(shown), hide_index=True, width="stretch")
+    st.caption(
+        f"Vista previa: {len(shown)} de {len(matching)} restricciones coincidentes; "
+        f"el lote completo contiene {result.number_of_constraints}."
+    )
+
+
+def _render_apply_import_controls(
+    result: ConstraintImportResult,
+    *,
+    key: str,
+    source_metadata: Dict[str, Any],
+) -> None:
+    variable_policy = st.segmented_control(
+        "Tratamiento de variables",
+        ["Validar contra variables actuales", "Usar variables detectadas"],
+        default="Validar contra variables actuales",
+        required=True,
+        key=f"{key}_variable_policy",
+        width="stretch",
+    )
+    if st.button(
+        "Aplicar importacion",
+        key=f"{key}_apply",
+        type="primary",
+        disabled=not result.is_valid,
+        icon=":material/check_circle:",
+    ):
+        try:
+            apply_constraint_import(
+                st.session_state,
+                result,
+                use_detected_variables=variable_policy == "Usar variables detectadas",
+                source_metadata=source_metadata,
+            )
+            st.session_state.constraint_import_preview = None
+            st.session_state.example_msg = (
+                f"{result.number_of_constraints} restricciones importadas; "
+                f"{result.number_of_variables} variables reconocidas; "
+                f"{result.nonzero_coefficients} coeficientes no nulos."
+            )
+            st.rerun()
+        except ValueError as exc:
+            st.error(str(exc), icon=":material/error:")
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +284,20 @@ def _init_session_state():
         st.session_state.last_solution_signature = None
     if "example_msg" not in st.session_state:
         st.session_state.example_msg = None
+    if "constraint_import_preview" not in st.session_state:
+        st.session_state.constraint_import_preview = None
+    if "objective_import_preview" not in st.session_state:
+        st.session_state.objective_import_preview = None
+    if "variable_import_preview" not in st.session_state:
+        st.session_state.variable_import_preview = None
+    if "constraint_import_metadata" not in st.session_state:
+        st.session_state.constraint_import_metadata = None
+    if "constraint_import_preview_metadata" not in st.session_state:
+        st.session_state.constraint_import_preview_metadata = None
+    if "objective_import_metadata" not in st.session_state:
+        st.session_state.objective_import_metadata = None
+    if "variable_import_metadata" not in st.session_state:
+        st.session_state.variable_import_metadata = None
 
 
 def _clear_widget_keys(state=None):
@@ -161,6 +332,12 @@ def _new_model(state=None):
     state.last_solution_type = None
     state.last_solution_problem = None
     state.last_solution_signature = None
+    state.constraint_import_preview = None
+    state.objective_import_preview = None
+    state.variable_import_preview = None
+    state.constraint_import_metadata = None
+    state.objective_import_metadata = None
+    state.variable_import_metadata = None
     state.example_msg = "Nuevo modelo en blanco iniciado."
 
 
@@ -200,6 +377,15 @@ def _load_model_dict(data: Dict[str, Any], state=None):
     state.last_solution_type = None
     state.last_solution_problem = None
     state.last_solution_signature = None
+    state.constraint_import_preview = None
+    state.objective_import_preview = None
+    state.variable_import_preview = None
+    state.constraint_import_metadata = {
+        "source_type": "json",
+        "filename": data.get("metadata", {}).get("name", "modelo.json"),
+        "constraint_count": len(data["constraints_data"]),
+        "variable_count": len(data["var_names"]),
+    }
 
     n_v = data["num_vars"]
     n_c = len(data["constraints_data"])
@@ -227,6 +413,7 @@ def _load_example_mono():
     st.session_state.last_solution_type = None
     st.session_state.last_solution_problem = None
     st.session_state.last_solution_signature = None
+    st.session_state.constraint_import_metadata = {"source_type": "example", "constraint_count": 3, "variable_count": 2}
     st.session_state.example_msg = "Ejemplo 1 (Monoobjetivo) cargado exitosamente."
 
 
@@ -252,6 +439,7 @@ def _load_example_bio():
     st.session_state.last_solution_type = None
     st.session_state.last_solution_problem = None
     st.session_state.last_solution_signature = None
+    st.session_state.constraint_import_metadata = {"source_type": "example", "constraint_count": 2, "variable_count": 2}
     st.session_state.example_msg = "Benchmark A (Biobjetivo) cargado exitosamente."
 
 
@@ -338,20 +526,21 @@ with st.sidebar:
         st.session_state.problem_type = prob_type
 
         st.subheader("2. Variables de Decision")
-        st.caption("Variables continuas no negativas ($x_i \\ge 0$). Soporta hasta 100 variables.")
+        st.caption(
+            "Variables continuas no negativas ($x_i \\ge 0$). "
+            "La edicion celda a celda se limita a 100 variables; los lotes admiten mas."
+        )
         num_vars = st.number_input(
-            "Cantidad de variables (1..100):",
+            "Cantidad de variables:",
             min_value=1,
-            max_value=100,
+            max_value=5000,
             value=int(st.session_state.num_vars),
             step=1,
             key=f"num_vars_input_{st.session_state.editor_version}",
         )
-        
-        # Sincronizar longitud de nombres al cambiar num_vars interactivamente
+
         old_var_names = list(st.session_state.var_names)
         if int(num_vars) != len(old_var_names):
-            st.session_state.num_vars = int(num_vars)
             if int(num_vars) > len(old_var_names):
                 for i in range(len(old_var_names), int(num_vars)):
                     new_default_name = f"x{i+1}"
@@ -362,60 +551,130 @@ with st.sidebar:
                     old_var_names.append(new_default_name)
             else:
                 old_var_names = old_var_names[:int(num_vars)]
-            st.session_state.var_names = old_var_names
-
-        # Editor de nombres de variables
-        st.markdown("**Nombres de variables:**")
-        df_vars_data = [{"#": i+1, "Nombre": name} for i, name in enumerate(st.session_state.var_names)]
-        edited_vars_df = st.data_editor(
-            pd.DataFrame(df_vars_data),
-            disabled=["#"],
-            hide_index=True,
-            width="stretch",
-            column_config={
-                "#": st.column_config.NumberColumn("#", width="small"),
-                "Nombre": st.column_config.TextColumn("Nombre Variable", width="medium", required=True),
-            },
-            key=f"var_names_editor_{st.session_state.editor_version}",
-        )
-
-        # Extraer y validar nombres editados
-        candidate_names = [str(r["Nombre"]).strip() for _, r in edited_vars_df.iterrows()]
-        has_var_name_error = False
-        if any(not name for name in candidate_names):
-            st.error("Los nombres de las variables no pueden estar vacios.")
-            has_var_name_error = True
-        elif len(set(candidate_names)) != len(candidate_names):
-            st.error("Los nombres de las variables deben ser unicos.")
-            has_var_name_error = True
-        elif candidate_names != st.session_state.var_names:
-            # Migrar coeficientes por posicion
-            old_names = list(st.session_state.var_names)
-            new_names = list(candidate_names)
-            
-            # Monoobjetivo
-            new_mono = {new_names[i]: float(st.session_state.obj_coeffs.get(old_names[i], 0.0)) for i in range(len(new_names))}
-            st.session_state.obj_coeffs = new_mono
-            
-            # Biobjetivo
-            new_bio1 = {new_names[i]: float(st.session_state.obj1_coeffs.get(old_names[i], 0.0)) for i in range(len(new_names))}
-            new_bio2 = {new_names[i]: float(st.session_state.obj2_coeffs.get(old_names[i], 0.0)) for i in range(len(new_names))}
-            st.session_state.obj1_coeffs = new_bio1
-            st.session_state.obj2_coeffs = new_bio2
-
-            # Restricciones
-            new_cons_data = []
-            for row in st.session_state.constraints_data:
-                new_row = {"name": row.get("name", "Restriccion"), "operator": row.get("operator", "<="), "rhs": row.get("rhs", 0.0)}
-                for i in range(len(new_names)):
-                    old_k = old_names[i] if i < len(old_names) else f"x{i+1}"
-                    new_k = new_names[i]
-                    new_row[new_k] = float(row.get(old_k, 0.0))
-                new_cons_data.append(new_row)
-            st.session_state.constraints_data = new_cons_data
-            st.session_state.var_names = new_names
-            st.session_state.editor_version += 1
+            apply_variable_import(
+                st.session_state,
+                old_var_names,
+                source_metadata={"mode": "quantity_control"},
+            )
             st.rerun()
+
+        has_var_name_error = False
+        if len(st.session_state.var_names) <= MANUAL_VARIABLE_EDITOR_LIMIT:
+            st.markdown("**Nombres de variables:**")
+            df_vars_data = [
+                {"#": index + 1, "Nombre": name}
+                for index, name in enumerate(st.session_state.var_names)
+            ]
+            edited_vars_df = st.data_editor(
+                pd.DataFrame(df_vars_data),
+                disabled=["#"],
+                hide_index=True,
+                width="stretch",
+                column_config={
+                    "#": st.column_config.NumberColumn("#", width="small"),
+                    "Nombre": st.column_config.TextColumn(
+                        "Nombre Variable", width="medium", required=True
+                    ),
+                },
+                key=f"var_names_editor_{st.session_state.editor_version}",
+            )
+            candidate_names = [
+                str(row["Nombre"]).strip() for _, row in edited_vars_df.iterrows()
+            ]
+            if any(not name for name in candidate_names):
+                st.error("Los nombres de las variables no pueden estar vacios.")
+                has_var_name_error = True
+            elif len(set(candidate_names)) != len(candidate_names):
+                st.error("Los nombres de las variables deben ser unicos.")
+                has_var_name_error = True
+            elif candidate_names != st.session_state.var_names:
+                old_names = list(st.session_state.var_names)
+                new_names = list(candidate_names)
+                st.session_state.obj_coeffs = {
+                    new_names[index]: float(st.session_state.obj_coeffs.get(old_names[index], 0.0))
+                    for index in range(len(new_names))
+                }
+                st.session_state.obj1_coeffs = {
+                    new_names[index]: float(st.session_state.obj1_coeffs.get(old_names[index], 0.0))
+                    for index in range(len(new_names))
+                }
+                st.session_state.obj2_coeffs = {
+                    new_names[index]: float(st.session_state.obj2_coeffs.get(old_names[index], 0.0))
+                    for index in range(len(new_names))
+                }
+                normalized_before_rename = normalize_constraints(
+                    st.session_state.constraints_data, old_names
+                )
+                renamed_constraints = []
+                for constraint in normalized_before_rename:
+                    coefficients = {}
+                    for index, new_name in enumerate(new_names):
+                        value = constraint["coefficients"].get(old_names[index], 0.0)
+                        if value != 0.0:
+                            coefficients[new_name] = value
+                    renamed_constraints.append(
+                        {
+                            "name": constraint["name"],
+                            "coefficients": coefficients,
+                            "operator": constraint["operator"],
+                            "rhs": constraint["rhs"],
+                        }
+                    )
+                st.session_state.constraints_data = renamed_constraints
+                st.session_state.var_names = new_names
+                st.session_state.last_solution = None
+                st.session_state.last_solution_type = None
+                st.session_state.last_solution_problem = None
+                st.session_state.last_solution_signature = None
+                st.session_state.editor_version += 1
+                st.rerun()
+        else:
+            st.info(
+                f"Modelo con {len(st.session_state.var_names)} variables. "
+                "La tabla de nombres esta deshabilitada por rendimiento."
+            )
+            st.caption(
+                "Muestra: " + ", ".join(st.session_state.var_names[:20])
+                + (" ..." if len(st.session_state.var_names) > 20 else "")
+            )
+
+        with st.expander("Nombres de variables en bloque"):
+            variable_text = st.text_area(
+                "Pegue nombres separados por coma, tabulador o salto de linea",
+                key=f"variable_batch_text_{st.session_state.editor_version}",
+                placeholder="x1,x2,x3,x4,x5",
+                height=110,
+            )
+            if st.button(
+                "Validar nombres",
+                key=f"validate_variables_{st.session_state.editor_version}",
+                icon=":material/rule:",
+            ):
+                st.session_state.variable_import_preview = parse_variable_names(variable_text)
+            variable_preview = st.session_state.variable_import_preview
+            if variable_preview is not None:
+                for error in variable_preview.errors:
+                    st.error(error, icon=":material/error:")
+                if variable_preview.variables:
+                    st.info(f"Variables detectadas: {len(variable_preview.variables)}")
+                    st.code(", ".join(variable_preview.variables[:30]))
+                if st.button(
+                    "Usar variables detectadas",
+                    key=f"apply_variables_{st.session_state.editor_version}",
+                    type="primary",
+                    disabled=not variable_preview.is_valid,
+                    icon=":material/check_circle:",
+                ):
+                    apply_variable_import(
+                        st.session_state,
+                        variable_preview,
+                        source_metadata={"mode": "block_text"},
+                    )
+                    st.session_state.variable_import_preview = None
+                    st.session_state.example_msg = (
+                        f"{len(variable_preview.variables)} variables aplicadas."
+                    )
+                    st.rerun()
 
         var_names = list(st.session_state.var_names)
 
@@ -485,24 +744,38 @@ with tab_form:
                 st.markdown("**Coeficientes lineales del objetivo:**")
                 st.caption("💡 **Nota:** Use punto (.) como separador decimal (ejemplo: 2.4525).")
 
-                # Editor tabular escalable para coeficientes
-                obj_df_data = [
-                    {"Variable": v, "Coeficiente": float(st.session_state.obj_coeffs.get(v, 1.0 if idx < 2 else 0.0))}
-                    for idx, v in enumerate(var_names)
-                ]
-                edited_obj_df = st.data_editor(
-                    pd.DataFrame(obj_df_data),
-                    disabled=["Variable"],
-                    hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "Variable": st.column_config.TextColumn("Variable", width="medium"),
-                        "Coeficiente": st.column_config.NumberColumn("Coeficiente", format="%.4f", required=True),
-                    },
-                    key=f"mono_obj_editor_{st.session_state.editor_version}",
-                )
-                obj_coeffs = {str(r["Variable"]): float(r["Coeficiente"]) for _, r in edited_obj_df.iterrows()}
-                st.session_state.obj_coeffs = obj_coeffs
+                if len(var_names) <= MANUAL_VARIABLE_EDITOR_LIMIT:
+                    obj_df_data = [
+                        {
+                            "Variable": variable,
+                            "Coeficiente": float(
+                                st.session_state.obj_coeffs.get(variable, 0.0)
+                            ),
+                        }
+                        for variable in var_names
+                    ]
+                    edited_obj_df = st.data_editor(
+                        pd.DataFrame(obj_df_data),
+                        disabled=["Variable"],
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Variable": st.column_config.TextColumn("Variable", width="medium"),
+                            "Coeficiente": st.column_config.NumberColumn(
+                                "Coeficiente", format="%.6g", required=True
+                            ),
+                        },
+                        key=f"mono_obj_editor_{st.session_state.editor_version}",
+                    )
+                    st.session_state.obj_coeffs = {
+                        str(row["Variable"]): float(row["Coeficiente"])
+                        for _, row in edited_obj_df.iterrows()
+                    }
+                else:
+                    st.info(
+                        "La tabla de coeficientes esta deshabilitada para este tamano. "
+                        "Use la entrada masiva de objetivo."
+                    )
 
             else:  # Biobjetivo
                 col_s1, col_s2 = st.columns(2)
@@ -528,30 +801,126 @@ with tab_form:
                 st.markdown("**Coeficientes de ambos objetivos:**")
                 st.caption("💡 **Nota:** Use punto (.) como separador decimal (ejemplo: 2.4525).")
 
-                bio_df_data = [
-                    {
-                        "Variable": v,
-                        "Coeficiente Z1": float(st.session_state.obj1_coeffs.get(v, 10.0 if idx == 0 else (3.0 if idx == 1 else 0.0))),
-                        "Coeficiente Z2": float(st.session_state.obj2_coeffs.get(v, 0.8 if idx == 0 else (1.3 if idx == 1 else 0.0))),
+                if len(var_names) <= MANUAL_VARIABLE_EDITOR_LIMIT:
+                    bio_df_data = [
+                        {
+                            "Variable": variable,
+                            "Coeficiente Z1": float(
+                                st.session_state.obj1_coeffs.get(variable, 0.0)
+                            ),
+                            "Coeficiente Z2": float(
+                                st.session_state.obj2_coeffs.get(variable, 0.0)
+                            ),
+                        }
+                        for variable in var_names
+                    ]
+                    edited_bio_df = st.data_editor(
+                        pd.DataFrame(bio_df_data),
+                        disabled=["Variable"],
+                        hide_index=True,
+                        width="stretch",
+                        column_config={
+                            "Variable": st.column_config.TextColumn("Variable", width="medium"),
+                            "Coeficiente Z1": st.column_config.NumberColumn(
+                                f"Coef. Z1 ({st.session_state.obj1_sense[:3].upper()})",
+                                format="%.6g",
+                                required=True,
+                            ),
+                            "Coeficiente Z2": st.column_config.NumberColumn(
+                                f"Coef. Z2 ({st.session_state.obj2_sense[:3].upper()})",
+                                format="%.6g",
+                                required=True,
+                            ),
+                        },
+                        key=f"bio_obj_editor_{st.session_state.editor_version}",
+                    )
+                    st.session_state.obj1_coeffs = {
+                        str(row["Variable"]): float(row["Coeficiente Z1"])
+                        for _, row in edited_bio_df.iterrows()
                     }
-                    for idx, v in enumerate(var_names)
-                ]
-                edited_bio_df = st.data_editor(
-                    pd.DataFrame(bio_df_data),
-                    disabled=["Variable"],
-                    hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "Variable": st.column_config.TextColumn("Variable", width="medium"),
-                        "Coeficiente Z1": st.column_config.NumberColumn(f"Coef. Z1 ({st.session_state.obj1_sense[:3].upper()})", format="%.4f", required=True),
-                        "Coeficiente Z2": st.column_config.NumberColumn(f"Coef. Z2 ({st.session_state.obj2_sense[:3].upper()})", format="%.4f", required=True),
-                    },
-                    key=f"bio_obj_editor_{st.session_state.editor_version}",
+                    st.session_state.obj2_coeffs = {
+                        str(row["Variable"]): float(row["Coeficiente Z2"])
+                        for _, row in edited_bio_df.iterrows()
+                    }
+                else:
+                    st.info(
+                        "Las tablas de objetivos estan deshabilitadas para este tamano. "
+                        "Use la entrada masiva."
+                    )
+
+            with st.expander("Entrada masiva de objetivo"):
+                expected_header = (
+                    "variable,coefficient"
+                    if st.session_state.problem_type == "Monoobjetivo"
+                    else "variable,Z1,Z2"
                 )
-                obj1_coeffs = {str(r["Variable"]): float(r["Coeficiente Z1"]) for _, r in edited_bio_df.iterrows()}
-                obj2_coeffs = {str(r["Variable"]): float(r["Coeficiente Z2"]) for _, r in edited_bio_df.iterrows()}
-                st.session_state.obj1_coeffs = obj1_coeffs
-                st.session_state.obj2_coeffs = obj2_coeffs
+                st.caption(
+                    f"Formato: `{expected_header}`. Las variables omitidas pasan a 0 "
+                    "solo al aplicar el lote."
+                )
+                objective_text = st.text_area(
+                    "Pegue coeficientes CSV/TSV",
+                    key=f"objective_batch_text_{st.session_state.editor_version}",
+                    height=140,
+                    placeholder=(
+                        objective_template_mono()
+                        if st.session_state.problem_type == "Monoobjetivo"
+                        else objective_template_bi()
+                    ),
+                )
+                objective_file = st.file_uploader(
+                    "O seleccione un CSV de objetivo",
+                    type=["csv"],
+                    key=f"objective_batch_file_{st.session_state.editor_version}",
+                    max_upload_size=5,
+                )
+                if st.button(
+                    "Validar objetivo",
+                    key=f"validate_objective_{st.session_state.editor_version}",
+                    icon=":material/rule:",
+                ):
+                    try:
+                        objective_source = (
+                            objective_file.getvalue().decode("utf-8-sig")
+                            if objective_file is not None
+                            else objective_text
+                        )
+                        st.session_state.objective_import_preview = parse_objective_text(
+                            objective_source,
+                            problem_type=st.session_state.problem_type,
+                            declared_variables=var_names,
+                        )
+                    except UnicodeDecodeError:
+                        st.session_state.objective_import_preview = None
+                        st.error("El CSV de objetivo debe usar UTF-8 o UTF-8-SIG.")
+                objective_preview = st.session_state.objective_import_preview
+                if objective_preview is not None:
+                    for error in objective_preview.errors:
+                        st.error(error, icon=":material/error:")
+                    for warning in objective_preview.warnings:
+                        st.warning(warning, icon=":material/warning:")
+                    st.write(
+                        f"Variables reconocidas: {len(objective_preview.recognized_variables)} · "
+                        f"desconocidas: {len(objective_preview.unknown_variables)} · "
+                        f"duplicadas: {len(objective_preview.duplicates)}"
+                    )
+                    if st.button(
+                        "Aplicar objetivo",
+                        key=f"apply_objective_{st.session_state.editor_version}",
+                        type="primary",
+                        disabled=not objective_preview.is_valid,
+                        icon=":material/check_circle:",
+                    ):
+                        apply_objective_import(
+                            st.session_state,
+                            objective_preview,
+                            source_metadata={
+                                "filename": objective_file.name if objective_file else None
+                            },
+                        )
+                        st.session_state.objective_import_preview = None
+                        st.session_state.example_msg = "Objetivo masivo aplicado correctamente."
+                        st.rerun()
 
         # Ponderaciones (solo en Biobjetivo)
         if st.session_state.problem_type == "Biobjetivo":
@@ -599,41 +968,273 @@ with tab_form:
     with col_right:
         with st.container(border=True):
             st.subheader("📋 Restricciones Lineales")
-            st.caption("Añada, edite o elimine restricciones lineales. Use punto (.) como separador decimal:")
-
-            current_data = []
-            for idx, c_dict in enumerate(st.session_state.constraints_data):
-                row = {
-                    "Nombre": c_dict.get("name", f"Restriccion {idx+1}"),
-                    "Operador": c_dict.get("operator", "<="),
-                    "RHS": float(c_dict.get("rhs", 10.0)),
-                }
-                for v in var_names:
-                    row[v] = float(c_dict.get(v, 0.0))
-                current_data.append(row)
-
-            df_constraints = pd.DataFrame(current_data)
-            column_order = ["Nombre"] + var_names + ["Operador", "RHS"]
-            col_config = {
-                "Nombre": st.column_config.TextColumn("Nombre", required=True),
-                "Operador": st.column_config.SelectboxColumn("Operador", options=["<=", ">=", "="], required=True),
-                "RHS": st.column_config.NumberColumn("Lado Derecho (RHS)", required=True, format="%.4f"),
-            }
-            for v in var_names:
-                col_config[v] = st.column_config.NumberColumn(f"{v}", required=True, format="%.4f")
-
-            edited_df = st.data_editor(
-                df_constraints[column_order],
-                num_rows="dynamic",
+            st.caption(
+                "Elija edicion manual para modelos pequenos o una importacion atomica "
+                "para matrices medianas y grandes."
+            )
+            input_mode = st.segmented_control(
+                "Modo de entrada",
+                ["Manual", "Pegar tabla", "CSV / XLSX", "Matriz dispersa"],
+                default="Manual",
+                required=True,
+                key="constraint_input_mode",
+                persist_state="session",
                 width="stretch",
-                column_config=col_config,
-                key=f"constraints_editor_{st.session_state.editor_version}",
             )
 
-        # Normalizar restricciones de forma canonica
-        raw_ui_records = edited_df.to_dict(orient="records") if not edited_df.empty else []
+            if input_mode == "Manual":
+                st.markdown("**Manual — recomendado para modelos pequeños**")
+                current_count = len(st.session_state.constraints_data)
+                current_cells = current_count * max(1, len(var_names))
+                manual_allowed = (
+                    current_count <= MANUAL_CONSTRAINT_ROW_LIMIT
+                    and current_cells <= MANUAL_CONSTRAINT_CELL_LIMIT
+                    and len(var_names) <= MANUAL_VARIABLE_EDITOR_LIMIT
+                )
+                if manual_allowed:
+                    current_data = _canonical_to_flat_rows(
+                        st.session_state.constraints_data, var_names
+                    )
+                    df_constraints = pd.DataFrame(current_data)
+                    column_order = ["Nombre"] + var_names + ["Operador", "RHS"]
+                    col_config = {
+                        "Nombre": st.column_config.TextColumn("Nombre", required=True),
+                        "Operador": st.column_config.SelectboxColumn(
+                            "Operador", options=["<=", ">=", "="], required=True
+                        ),
+                        "RHS": st.column_config.NumberColumn(
+                            "Lado Derecho (RHS)", required=True, format="%.6g"
+                        ),
+                    }
+                    for variable in var_names:
+                        col_config[variable] = st.column_config.NumberColumn(
+                            variable, required=True, format="%.6g"
+                        )
+                    edited_df = st.data_editor(
+                        df_constraints.reindex(columns=column_order),
+                        num_rows="dynamic",
+                        width="stretch",
+                        column_config=col_config,
+                        key=f"constraints_editor_{st.session_state.editor_version}",
+                    )
+                    manual_submit = st.button(
+                        "Aplicar cambios manuales",
+                        type="primary",
+                        key=f"apply_manual_constraints_{st.session_state.editor_version}",
+                        icon=":material/check_circle:",
+                    )
+                    if manual_submit:
+                        try:
+                            manual_constraints = normalize_constraints(
+                                edited_df.to_dict(orient="records"), var_names
+                            )
+                            manual_result = ConstraintImportResult(
+                                constraints=manual_constraints,
+                                detected_variables=list(var_names),
+                                source_format="manual",
+                                source_rows=len(manual_constraints),
+                            )
+                            apply_constraint_import(
+                                st.session_state,
+                                manual_result,
+                                use_detected_variables=False,
+                                source_metadata={"mode": "manual_editor"},
+                            )
+                            st.session_state.example_msg = (
+                                f"{len(manual_constraints)} restricciones manuales aplicadas."
+                            )
+                            st.rerun()
+                        except ValueError as exc:
+                            st.error(str(exc), icon=":material/error:")
+                else:
+                    st.warning(
+                        f"Este modelo contiene {current_count} restricciones y "
+                        f"{len(var_names)} variables. La edicion celda a celda esta "
+                        "deshabilitada por rendimiento. Use importacion masiva o "
+                        "exporte y edite el CSV disperso."
+                    )
+
+            elif input_mode == "Pegar tabla":
+                st.markdown("**Paso 1 — pegar · Paso 2 — validar · Paso 3 — previsualizar · Paso 4 — aplicar**")
+                pasted_text = st.text_area(
+                    "Pegue una tabla ancha desde Excel, Google Sheets, CSV o TSV",
+                    key="constraint_paste_text",
+                    persist_state="session",
+                    height=180,
+                    placeholder=constraint_template_wide(),
+                )
+                decimal_separator = st.selectbox(
+                    "Separador decimal",
+                    [".", ","],
+                    key="constraint_paste_decimal",
+                )
+                if st.button("Validar tabla pegada", key="validate_pasted_constraints", icon=":material/rule:"):
+                    st.session_state.constraint_import_preview = parse_constraint_text(
+                        pasted_text,
+                        input_format="wide",
+                        decimal_separator=decimal_separator,
+                    )
+                    st.session_state.constraint_import_preview_metadata = {
+                        "source_type": "paste",
+                        "format": "wide",
+                    }
+                result = st.session_state.constraint_import_preview
+                metadata = st.session_state.constraint_import_preview_metadata or {}
+                if result is not None and metadata.get("source_type") == "paste":
+                    _render_constraint_import_preview(result, "paste_preview")
+                    _render_apply_import_controls(result, key="paste", source_metadata=metadata)
+
+            elif input_mode == "CSV / XLSX":
+                st.markdown("**Paso 1 — cargar · Paso 2 — validar · Paso 3 — previsualizar · Paso 4 — aplicar**")
+                uploaded_constraints = st.file_uploader(
+                    "Seleccione CSV o XLSX (sin macros)",
+                    type=["csv", "xlsx"],
+                    key="constraint_file_upload",
+                    max_upload_size=20,
+                )
+                decimal_separator = st.selectbox(
+                    "Separador decimal del archivo",
+                    [".", ","],
+                    key="constraint_file_decimal",
+                )
+                selected_sheet = None
+                file_error = None
+                if uploaded_constraints is not None and uploaded_constraints.name.lower().endswith(".xlsx"):
+                    try:
+                        sheets = _cached_xlsx_sheets(uploaded_constraints.getvalue())
+                        selected_sheet = st.selectbox("Hoja XLSX", sheets, key="constraint_xlsx_sheet")
+                    except ValueError as exc:
+                        file_error = str(exc)
+                        st.error(file_error, icon=":material/error:")
+                if st.button(
+                    "Validar archivo",
+                    key="validate_constraint_file",
+                    disabled=uploaded_constraints is None or file_error is not None,
+                    icon=":material/rule:",
+                ):
+                    filename = uploaded_constraints.name
+                    lower_filename = filename.lower()
+                    if lower_filename.endswith(".csv"):
+                        try:
+                            decoded = uploaded_constraints.getvalue().decode("utf-8-sig")
+                            imported = parse_constraint_text(
+                                decoded,
+                                input_format="auto",
+                                decimal_separator=decimal_separator,
+                            )
+                        except UnicodeDecodeError:
+                            imported = ConstraintImportResult(
+                                errors=["El CSV debe usar UTF-8 o UTF-8-SIG."],
+                                source_format="csv",
+                            )
+                    elif lower_filename.endswith(".xlsx"):
+                        imported = _cached_xlsx_constraints(
+                            uploaded_constraints.getvalue(),
+                            selected_sheet,
+                            decimal_separator,
+                        )
+                    else:
+                        imported = ConstraintImportResult(
+                            errors=["Formato rechazado. Solo se admiten .csv y .xlsx."],
+                            source_format="unsupported",
+                        )
+                    st.session_state.constraint_import_preview = imported
+                    st.session_state.constraint_import_preview_metadata = {
+                        "source_type": "file",
+                        "filename": filename,
+                        "sheet": selected_sheet,
+                    }
+                result = st.session_state.constraint_import_preview
+                metadata = st.session_state.constraint_import_preview_metadata or {}
+                if result is not None and metadata.get("source_type") == "file":
+                    _render_constraint_import_preview(result, "file_preview")
+                    _render_apply_import_controls(result, key="file", source_metadata=metadata)
+
+            else:
+                st.markdown("**Paso 1 — cargar tripletas · Paso 2 — validar · Paso 3 — previsualizar · Paso 4 — aplicar**")
+                sparse_text = st.text_area(
+                    "Tabla dispersa: constraint, variable, coefficient, operator, rhs",
+                    key="constraint_sparse_text",
+                    persist_state="session",
+                    height=200,
+                    placeholder=constraint_template_sparse(),
+                )
+                if st.button("Validar matriz dispersa", key="validate_sparse_constraints", icon=":material/rule:"):
+                    st.session_state.constraint_import_preview = parse_constraint_text(
+                        sparse_text, input_format="sparse"
+                    )
+                    st.session_state.constraint_import_preview_metadata = {
+                        "source_type": "paste",
+                        "format": "sparse",
+                    }
+                result = st.session_state.constraint_import_preview
+                metadata = st.session_state.constraint_import_preview_metadata or {}
+                if result is not None and metadata.get("format") == "sparse":
+                    _render_constraint_import_preview(result, "sparse_preview")
+                    _render_apply_import_controls(result, key="sparse", source_metadata=metadata)
+
+            with st.expander("Descargar plantillas CSV"):
+                st.download_button(
+                    "Plantilla restricciones formato ancho",
+                    constraint_template_wide(),
+                    "restricciones_formato_ancho.csv",
+                    "text/csv",
+                )
+                st.download_button(
+                    "Plantilla restricciones formato disperso",
+                    constraint_template_sparse(),
+                    "restricciones_formato_disperso.csv",
+                    "text/csv",
+                )
+                st.download_button(
+                    "Plantilla objetivo monoobjetivo",
+                    objective_template_mono(),
+                    "objetivo_monoobjetivo.csv",
+                    "text/csv",
+                )
+                st.download_button(
+                    "Plantilla objetivos biobjetivo",
+                    objective_template_bi(),
+                    "objetivos_biobjetivo.csv",
+                    "text/csv",
+                )
+
+            applied_constraints = normalize_constraints(
+                st.session_state.constraints_data, var_names
+            )
+            applied_nnz = sum(len(row["coefficients"]) for row in applied_constraints)
+            applied_density_denominator = len(applied_constraints) * len(var_names)
+            applied_density = (
+                applied_nnz / applied_density_denominator
+                if applied_density_denominator
+                else 0.0
+            )
+            st.markdown("**Modelo aplicado actualmente**")
+            st.write(
+                f"Variables: {len(var_names)} · Restricciones: {len(applied_constraints)} · "
+                f"Coeficientes no nulos: {applied_nnz:,} · Densidad: {100 * applied_density:.2f} %"
+            )
+            applied_filter = st.text_input(
+                "Buscar restriccion aplicada",
+                key="applied_constraint_search",
+                persist_state="session",
+                placeholder="Nombre de restriccion",
+            )
+            applied_rows = _constraint_preview_rows(applied_constraints, applied_filter)
+            st.dataframe(
+                pd.DataFrame(applied_rows[:IMPORT_PREVIEW_LIMIT]),
+                hide_index=True,
+                width="stretch",
+            )
+            st.caption(
+                f"Vista previa: {min(IMPORT_PREVIEW_LIMIT, len(applied_rows))} de "
+                f"{len(applied_rows)} restricciones coincidentes. El modelo completo no se trunca."
+            )
+
         try:
-            canonical_constraints = normalize_constraints(raw_ui_records, var_names) if raw_ui_records else []
+            canonical_constraints = normalize_constraints(
+                st.session_state.constraints_data, var_names
+            )
             cons_norm_error = None
         except Exception as e:
             canonical_constraints = []
@@ -644,30 +1245,46 @@ with tab_form:
             st.subheader("👁️ Vista Previa Matematica del Modelo")
             if st.session_state.problem_type == "Monoobjetivo":
                 s_txt = st.session_state.obj_sense[:3].upper()
-                terms_z = [f"{c:g} {v}" for v, c in st.session_state.obj_coeffs.items() if abs(c) > 1e-7]
+                terms_z_all = [f"{c:g} {v}" for v, c in st.session_state.obj_coeffs.items() if abs(c) > 1e-7]
+                terms_z = terms_z_all[:20]
                 expr_z = " + ".join(terms_z).replace("+ -", "- ") if terms_z else "0"
+                if len(terms_z_all) > 20:
+                    expr_z += f" + \\dots\\quad ({len(terms_z_all)}\\;terminos)"
                 st.latex(f"\\text{{{s_txt}}}\\quad Z = {expr_z}")
             else:
                 s1_txt = st.session_state.obj1_sense[:3].upper()
-                terms_z1 = [f"{c:g} {v}" for v, c in st.session_state.obj1_coeffs.items() if abs(c) > 1e-7]
+                terms_z1_all = [f"{c:g} {v}" for v, c in st.session_state.obj1_coeffs.items() if abs(c) > 1e-7]
+                terms_z1 = terms_z1_all[:20]
                 expr_z1 = " + ".join(terms_z1).replace("+ -", "- ") if terms_z1 else "0"
+                if len(terms_z1_all) > 20:
+                    expr_z1 += f" + \\dots\\quad ({len(terms_z1_all)}\\;terminos)"
 
                 s2_txt = st.session_state.obj2_sense[:3].upper()
-                terms_z2 = [f"{c:g} {v}" for v, c in st.session_state.obj2_coeffs.items() if abs(c) > 1e-7]
+                terms_z2_all = [f"{c:g} {v}" for v, c in st.session_state.obj2_coeffs.items() if abs(c) > 1e-7]
+                terms_z2 = terms_z2_all[:20]
                 expr_z2 = " + ".join(terms_z2).replace("+ -", "- ") if terms_z2 else "0"
+                if len(terms_z2_all) > 20:
+                    expr_z2 += f" + \\dots\\quad ({len(terms_z2_all)}\\;terminos)"
 
                 st.latex(f"\\text{{{s1_txt}}}\\quad Z_1 = {expr_z1}")
                 st.latex(f"\\text{{{s2_txt}}}\\quad Z_2 = {expr_z2}")
 
-            # Restricciones en LaTeX (mostrar hasta 15 para mantener rendimiento)
+            # Restricciones en LaTeX (muestra; nunca trunca el modelo aplicado)
             latex_cons = []
-            if not edited_df.empty:
-                for _, r in edited_df.head(15).iterrows():
-                    c_terms = [f"{r[v]:g} {v}" for v in var_names if abs(r.get(v, 0.0)) > 1e-7]
-                    lhs_str = " + ".join(c_terms).replace("+ -", "- ") if c_terms else "0"
-                    op_sym = "\\le" if r.get("Operador") == "<=" else ("\\ge" if r.get("Operador") == ">=" else "=")
-                    rhs_val = r.get("RHS", 0.0)
-                    latex_cons.append(f"{lhs_str} {op_sym} {rhs_val:g}")
+            for constraint in canonical_constraints[:15]:
+                c_terms = [
+                    f"{coefficient:g} {variable}"
+                    for variable, coefficient in constraint["coefficients"].items()
+                    if abs(coefficient) > 1e-7
+                ]
+                lhs_str = " + ".join(c_terms).replace("+ -", "- ") if c_terms else "0"
+                op_sym = (
+                    "\\le"
+                    if constraint["operator"] == "<="
+                    else "\\ge" if constraint["operator"] == ">=" else "="
+                )
+                rhs_val = constraint["rhs"]
+                latex_cons.append(f"{lhs_str} {op_sym} {rhs_val:g}")
 
             vars_nonneg = ", ".join(var_names[:6]) + (", \\dots" if len(var_names) > 6 else "") + " \\ge 0"
             all_lines = "\\\\\n".join(latex_cons + [vars_nonneg])
@@ -677,10 +1294,20 @@ with tab_form:
         with st.expander("🔧 Diagnostico del modelo efectivo", expanded=False):
             st.markdown(f"**Nombre:** {st.session_state.model_name}")
             st.markdown(f"**Tipo de Problema:** {st.session_state.problem_type}")
-            st.markdown(f"**Variables ({len(var_names)}):** `{'`, `'.join(var_names)}`")
+            variable_sample = ", ".join(var_names[:20]) + (" ..." if len(var_names) > 20 else "")
+            st.markdown(f"**Variables ({len(var_names)}):** `{variable_sample}`")
             if st.session_state.problem_type == "Monoobjetivo":
                 st.markdown(f"**Sentido:** {st.session_state.obj_sense}")
-                st.markdown(f"**Coeficientes no nulos:** {[f'{v}: {c}' for v, c in st.session_state.obj_coeffs.items() if abs(c) > 1e-7]}")
+                nonzero_objective = [
+                    f"{variable}: {coefficient}"
+                    for variable, coefficient in st.session_state.obj_coeffs.items()
+                    if abs(coefficient) > 1e-7
+                ]
+                st.markdown(
+                    f"**Coeficientes no nulos ({len(nonzero_objective)}):** "
+                    f"{nonzero_objective[:20]}"
+                    + (" ..." if len(nonzero_objective) > 20 else "")
+                )
             else:
                 st.markdown(f"**Sentidos:** Z1={st.session_state.obj1_sense}, Z2={st.session_state.obj2_sense}")
             st.markdown(f"**Restricciones validas procesadas:** {len(canonical_constraints)}")
@@ -694,7 +1321,15 @@ with tab_form:
                         "RHS": c["rhs"],
                         "Variables Activas": ", ".join(active_vars[:4]) + (", ..." if len(active_vars) > 4 else ""),
                     })
-                st.dataframe(pd.DataFrame(diag_summary), width="stretch", hide_index=True)
+                st.dataframe(
+                    pd.DataFrame(diag_summary[:IMPORT_PREVIEW_LIMIT]),
+                    width="stretch",
+                    hide_index=True,
+                )
+                st.caption(
+                    f"Diagnostico: {min(IMPORT_PREVIEW_LIMIT, len(diag_summary))} de "
+                    f"{len(diag_summary)} restricciones."
+                )
 
     # -----------------------------------------------------------------------
     # Boton de Resolucion y Descarga
@@ -707,7 +1342,7 @@ with tab_form:
     elif not canonical_constraints:
         st.warning("⚠️ **No es posible resolver ni descargar el modelo:** Ingrese al menos una restriccion lineal valida en la tabla.")
 
-    col_act1, col_act2 = st.columns([2, 1])
+    col_act1, col_act2, col_act3 = st.columns([2, 1, 1])
     with col_act1:
         btn_solve = st.button(
             "🚀 Resolver Modelo con Pyomo + HiGHS",
@@ -752,6 +1387,18 @@ with tab_form:
             )
         except Exception as e:
             st.error(f"No se pudo preparar la exportacion JSON: {e}")
+    with col_act3:
+        sparse_export = constraints_to_sparse_csv(canonical_constraints, var_names)
+        csv_name = sanitize_filename(st.session_state.model_name).removesuffix(".json") + "_restricciones.csv"
+        st.download_button(
+            label="Descargar restricciones CSV",
+            data=sparse_export,
+            file_name=csv_name,
+            mime="text/csv",
+            width="stretch",
+            disabled=bool(cons_norm_error or not canonical_constraints),
+            icon=":material/download:",
+        )
 
 
 # ---------------------------------------------------------------------------

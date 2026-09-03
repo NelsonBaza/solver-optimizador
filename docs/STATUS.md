@@ -34,8 +34,8 @@
 | **Benchmark A (AMPL + HiGHS)** | [`benchmark_a_multiobjective.py`](../benchmark_a_multiobjective.py) | **PASS** | Matriz de pagos validada, rangos $\Delta Z=(610, 89)$, 6 ejecuciones ponderadas, 3 soluciones únicas no dominadas verificadas contra referencia académica. |
 | **Benchmark A (Pyomo + HiGHS)** | [`benchmark_a_pyomo.py`](../benchmark_a_pyomo.py) | **PASS** | Coincidencia matemática exacta al 100% con AMPL y referencia. Matriz de pagos, rangos, 6 pesos, 3 soluciones únicas no dominadas idénticas. |
 | **Comparación de Backends** | [`docs/BENCHMARK_A_BACKEND_COMPARISON.md`](BENCHMARK_A_BACKEND_COMPARISON.md) | **PASS** | Evaluación en 12 criterios y 8 dimensiones. Pyomo adoptado como backend exacto provisional (+5.7 pts). |
-| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 69 pruebas unitarias aprobadas (mono MAX/MIN, bio MAX/MAX, MAX/MIN, MIN/MIN, infactibilidad, no acotamiento, validación de pesos, rango nulo, nombres especiales, entradas no finitas, firmas deterministas, interpretación MAX/MIN, persistencia JSON con normalización canónica y filtrado de filas dinámicas vacías, gráficos para $N \ge 1$, nombres personalizados, modelo hidroeléctrico 24 variables, constructor de problemas, desempate lexicográfico y suite end-to-end de carga Streamlit con AppTest). |
-| **MVP Interfaz Web** | `streamlit run streamlit_app.py` | **PASS** | Interfaz funcional y sincronizada con carga atómica de modelos, versionado de widgets (`editor_version`), desempate lexicográfico en matriz de pagos, normalización canónica de restricciones, nombres personalizados hasta 100 variables, gráficos de variables y holguras para $N$ dimensiones, detección de desactualización e interpretación automática. |
+| **Suite de Pruebas Unitarias** | `pytest tests/` | **PASS** | 124 pruebas aprobadas en Fase 3A: núcleo LP, integridad numérica, ponderaciones normalizadas, hidroeléctrico, persistencia JSON dispersa, importación ancha/dispersa CSV/TSV/XLSX, rechazo de macros, lotes de 50/500 restricciones, matriz dispersa 1.000×100 y recorridos Streamlit con AppTest. |
+| **MVP Interfaz Web** | `streamlit run streamlit_app.py` | **PASS** | Interfaz funcional con edición manual acotada e importación masiva ancha/dispersa, carga atómica, versionado de widgets (`editor_version`), matriz de pagos eficiente, normalización canónica dispersa, gráficos de variables y holguras para $N$ dimensiones, detección de desactualización e interpretación automática. |
 
 ---
 
@@ -44,7 +44,7 @@
 | Archivo / Carpeta | Descripción |
 | :--- | :--- |
 | [`src/solver_optimizador/`](../src/solver_optimizador/) | Paquete principal del motor matemático desacoplado (`lp_models`, `lp_solver`, `multiobjective`, `problem_builder`, `plotting`, `signature`, `interpretation`, `model_io`). |
-| [`streamlit_app.py`](../streamlit_app.py) | Aplicación web interactiva Streamlit (hasta 100 variables con nombres personalizados, versionado de widgets, matriz de pagos eficiente y carga atómica). |
+| [`streamlit_app.py`](../streamlit_app.py) | Aplicación web interactiva Streamlit (edición manual hasta 100 variables; lotes masivos, representación dispersa, matriz de pagos eficiente y carga atómica). |
 | [`tests/test_lp_core.py`](../tests/test_lp_core.py) | Suite de pruebas unitarias para el motor matemático (`pytest`, 12 tests). |
 | [`tests/test_lexicographic_payoff.py`](../tests/test_lexicographic_payoff.py) | Suite de pruebas unitarias para desempate lexicográfico, matriz de pagos eficiente y barrido ponderado (12 tests). |
 | [`tests/test_model_signature.py`](../tests/test_model_signature.py) | Pruebas unitarias para la detección determinista de resultados desactualizados (7 tests). |

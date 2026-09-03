@@ -117,3 +117,31 @@ def test_streamlit_app_apptest_solve_bio_benchmark_a():
         )
     ]
     assert len(sweep_tables) == 1
+
+
+def test_streamlit_bulk_paste_preview_and_atomic_apply_persists_50_constraints():
+    """Valida en AppTest el flujo pegar -> validar -> aplicar -> session_state."""
+
+    at = AppTest.from_file(APP_PATH, default_timeout=20).run()
+    assert not at.exception
+    mode = next(element for element in at.segmented_control if element.label == "Modo de entrada")
+    mode.set_value("Pegar tabla").run()
+    rows = ["name,x1,x2,operator,rhs"]
+    rows.extend(f"R{index},1,0,<=,{index + 10}" for index in range(1, 51))
+    paste = next(
+        element
+        for element in at.text_area
+        if element.label.startswith("Pegue una tabla ancha")
+    )
+    paste.set_value("\n".join(rows)).run()
+    validate = next(button for button in at.button if button.label == "Validar tabla pegada")
+    validate.click().run()
+    preview = at.session_state.constraint_import_preview
+    assert preview.number_of_constraints == 50
+    assert len(at.session_state.constraints_data) == 2
+    apply_button = next(button for button in at.button if button.label == "Aplicar importacion")
+    apply_button.click().run()
+    assert not at.exception
+    assert len(at.session_state.constraints_data) == 50
+    assert at.session_state.last_solution is None
+    assert at.session_state.constraint_import_metadata["constraint_count"] == 50

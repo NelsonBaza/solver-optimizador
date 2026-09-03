@@ -55,6 +55,7 @@ def build_model_signature(
 
     # Restricciones (soporta claves aplanadas o anidadas)
     cons_list = []
+    variable_set = set(var_names)
     if constraints_data:
         for c in constraints_data:
             c_name = str(c.get("name", c.get("Nombre", ""))).strip()
@@ -66,13 +67,24 @@ def build_model_signature(
                 c_rhs = 0.0
 
             sub_coeffs = c.get("coefficients", {}) if isinstance(c.get("coefficients"), dict) else {}
+            coefficient_items = dict(sub_coeffs)
+            coefficient_items.update(
+                {
+                    key: value
+                    for key, value in c.items()
+                    if key in variable_set and key not in coefficient_items
+                }
+            )
             c_coeffs = {}
-            for v in var_names:
-                raw_c = c.get(v, sub_coeffs.get(v, 0.0))
+            for v, raw_c in coefficient_items.items():
+                if v not in variable_set:
+                    continue
                 try:
-                    c_coeffs[v] = float(raw_c)
+                    value = float(raw_c)
                 except (ValueError, TypeError):
-                    c_coeffs[v] = 0.0
+                    value = 0.0
+                if value != 0.0:
+                    c_coeffs[v] = value
 
             cons_list.append({
                 "name": c_name,

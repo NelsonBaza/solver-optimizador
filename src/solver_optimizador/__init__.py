@@ -38,6 +38,23 @@ from .problem_builder import (
     build_lp_problem_from_state,
     build_biobjective_problem_from_state,
 )
+from .constraint_import import (
+    ConstraintImportResult,
+    ObjectiveImportResult,
+    VariableImportResult,
+    constraints_to_sparse_csv,
+    import_constraint_table,
+    list_xlsx_sheets,
+    parse_constraint_text,
+    parse_objective_text,
+    parse_variable_names,
+    parse_xlsx_constraints,
+)
+from .input_application import (
+    apply_constraint_import,
+    apply_objective_import,
+    apply_variable_import,
+)
 from .plotting import (
     plot_feasible_region_2d,
     plot_objective_space_2d,
@@ -75,6 +92,19 @@ __all__ = [
     "plot_multiobjective_runs",
     "build_lp_problem_from_state",
     "build_biobjective_problem_from_state",
+    "ConstraintImportResult",
+    "ObjectiveImportResult",
+    "VariableImportResult",
+    "constraints_to_sparse_csv",
+    "import_constraint_table",
+    "list_xlsx_sheets",
+    "parse_constraint_text",
+    "parse_objective_text",
+    "parse_variable_names",
+    "parse_xlsx_constraints",
+    "apply_constraint_import",
+    "apply_objective_import",
+    "apply_variable_import",
     "solve_lp",
     "solve_biobjective_weighted",
     "solve_lexicographic_extreme",

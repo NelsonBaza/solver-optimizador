@@ -146,10 +146,8 @@ def test_mono_model_min_15x1_23x2_with_trailing_empty_row():
     )
     loaded = deserialize_model(json_str)
     assert len(loaded["constraints_data"]) == 2
-    assert loaded["constraints_data"][0]["x1"] == 10.0
-    assert loaded["constraints_data"][0]["x2"] == 5.0
-    assert loaded["constraints_data"][1]["x1"] == 2.0
-    assert loaded["constraints_data"][1]["x2"] == 13.0
+    assert loaded["constraints_data"][0]["coefficients"] == {"x1": 10.0, "x2": 5.0}
+    assert loaded["constraints_data"][1]["coefficients"] == {"x1": 2.0, "x2": 13.0}
 
 
 def test_exact_bug_case_10x1_15x2_preservation():
@@ -224,11 +222,11 @@ def test_exact_bug_case_10x1_15x2_preservation():
         variables=loaded["var_names"],
         objective=LinearObjective("Z", Sense.from_str(loaded["obj_sense"]), loaded["obj_coeffs"]),
         constraints=[
-            LinearConstraint(
-                c["name"],
-                {v: c[v] for v in loaded["var_names"]},
-                Operator.from_str(c["operator"]),
-                c["rhs"],
+                LinearConstraint(
+                    c["name"],
+                    c["coefficients"],
+                    Operator.from_str(c["operator"]),
+                    c["rhs"],
             )
             for c in loaded["constraints_data"]
         ],
@@ -421,11 +419,11 @@ def test_hydroelectric_model_roundtrip_and_solve():
         variables=loaded["var_names"],
         objective=LinearObjective("Z", Sense.from_str(loaded["obj_sense"]), loaded["obj_coeffs"]),
         constraints=[
-            LinearConstraint(
-                c["name"],
-                {v: c[v] for v in loaded["var_names"]},
-                Operator.from_str(c["operator"]),
-                c["rhs"],
+                LinearConstraint(
+                    c["name"],
+                    c["coefficients"],
+                    Operator.from_str(c["operator"]),
+                    c["rhs"],
             )
             for c in loaded["constraints_data"]
         ],
@@ -468,5 +466,5 @@ def test_comma_decimal_parsing():
     loaded = deserialize_model(json_str)
 
     assert loaded["obj_coeffs"]["x1"] == 3.5
-    assert loaded["constraints_data"][0]["x1"] == 2.4525
+    assert loaded["constraints_data"][0]["coefficients"]["x1"] == 2.4525
     assert loaded["constraints_data"][0]["rhs"] == 60.5

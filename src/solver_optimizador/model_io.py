@@ -50,11 +50,15 @@ def _safe_float(val: Any) -> float:
     if _is_blank_value(val):
         raise ValueError(f"No se puede convertir un valor vacio/NaN a numero: {val}")
     if isinstance(val, (int, float)):
-        return float(val)
-    if isinstance(val, str):
+        number = float(val)
+    elif isinstance(val, str):
         clean = val.strip().replace(",", ".")
-        return float(clean)
-    raise ValueError(f"No se puede convertir a numero: {val}")
+        number = float(clean)
+    else:
+        raise ValueError(f"No se puede convertir a numero: {val}")
+    if not math.isfinite(number):
+        raise ValueError(f"El valor numerico debe ser finito: {val}")
+    return number
 
 
 def is_empty_constraint_row(row: Dict[str, Any], var_names: Optional[List[str]] = None) -> bool:
@@ -110,7 +114,7 @@ def normalize_constraints(
     a la estructura canonica unica:
     {
         "name": str,
-        "coefficients": {v: float for v in var_names},
+        "coefficients": {v: float for v con coeficiente distinto de cero},
         "operator": str ("<=" | ">=" | "="),
         "rhs": float,
     }
@@ -121,6 +125,7 @@ def normalize_constraints(
         raise ValueError(f"Las restricciones deben ser una lista, se recibio: {type(raw_constraints)}")
 
     canonical_list: List[Dict[str, Any]] = []
+    variable_set = set(var_names)
 
     for idx, c in enumerate(raw_constraints):
         if not isinstance(c, dict):
@@ -157,19 +162,29 @@ def normalize_constraints(
         coeffs_dict: Dict[str, float] = {}
         nested_coeffs = c.get("coefficients")
         if isinstance(nested_coeffs, dict):
-            for v in var_names:
-                raw_v = nested_coeffs.get(v, c.get(v))
-                if _is_blank_value(raw_v):
-                    coeffs_dict[v] = 0.0
-                else:
-                    coeffs_dict[v] = _safe_float(raw_v)
+            candidates = dict(nested_coeffs)
+            candidates.update(
+                {
+                    key: value
+                    for key, value in c.items()
+                    if key in variable_set and key not in candidates
+                }
+            )
+            for v, raw_v in candidates.items():
+                if v not in variable_set:
+                    continue
+                if not _is_blank_value(raw_v):
+                    value = _safe_float(raw_v)
+                    if value != 0.0:
+                        coeffs_dict[v] = value
         else:
-            for v in var_names:
-                raw_v = c.get(v)
-                if _is_blank_value(raw_v):
-                    coeffs_dict[v] = 0.0
-                else:
-                    coeffs_dict[v] = _safe_float(raw_v)
+            for v, raw_v in c.items():
+                if v not in variable_set:
+                    continue
+                if not _is_blank_value(raw_v):
+                    value = _safe_float(raw_v)
+                    if value != 0.0:
+                        coeffs_dict[v] = value
 
         canonical_list.append({
             "name": c_name,
@@ -363,17 +378,9 @@ def deserialize_model(json_str: str) -> Dict[str, Any]:
     # Normalizar restricciones para asegurar consistencia
     canonical_cons = normalize_constraints(problem.get("constraints", []), var_names)
 
-    # Adaptar restricciones a formato amigable de dataframe / session_state
-    constraints_data = []
-    for c in canonical_cons:
-        row = {
-            "name": c["name"],
-            "operator": c["operator"],
-            "rhs": c["rhs"],
-        }
-        for v in var_names:
-            row[v] = c["coefficients"][v]
-        constraints_data.append(row)
+    # Mantener representacion canonica dispersa. La UI solo crea una copia
+    # densa y acotada cuando abre el editor manual para modelos pequenos.
+    constraints_data = canonical_cons
 
     meta_name = str(metadata.get("name", "")).strip() or "Modelo Importado"
     res: Dict[str, Any] = {

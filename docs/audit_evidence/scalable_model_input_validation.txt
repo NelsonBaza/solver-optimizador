@@ -1,0 +1,171 @@
+FASE 3A - EVIDENCIA DE ENTRADA ESCALABLE DE MODELOS
+Fecha: 2026-09-02 (America/Bogota)
+Rama: codex/feature-scalable-model-input
+Commit base: 4e4b2e89c282dcd66e395a89db0671ad3c57ded5
+Backend conservado: Pyomo 6.10.1 + APPSI HiGHS 1.15.1
+Python: 3.13.1
+Streamlit: 1.62.0
+
+ARQUITECTURA IMPLEMENTADA
+entrada -> constraint_import (parseo/validacion) -> representacion canonica
+dispersa -> problem_builder -> Pyomo/APPSI HiGHS
+
+Los importadores no importan Streamlit, Pyomo ni HiGHS. La aplicacion al estado
+se realiza atomicamente mediante input_application. Los builders y solvers
+consumen los diccionarios de coeficientes dispersos sin construir una matriz
+densa. El punto de extension para la futura Fase 3B es
+import_constraint_table(headers, rows, ...); no se implementaron conjuntos,
+parametros, forall ni familias indexadas.
+
+FORMATOS SOPORTADOS
+- Manual, recomendado para modelos pequenos.
+- Tabla ancha pegada: CSV, TSV y separacion por punto y coma.
+- Archivo CSV UTF-8 o UTF-8-SIG.
+- Hoja seleccionable de XLSX OOXML, tratada solo como datos.
+- Tabla dispersa/long: constraint,variable,coefficient,operator,rhs.
+- Variables en bloque separadas por coma, punto y coma, tabulador o salto.
+- Objetivo monoobjetivo y objetivos biobjetivo pegados o cargados como CSV.
+- Exportacion de restricciones en CSV disperso y plantillas descargables.
+
+VALIDACIONES DE ESCALA Y EQUIVALENCIA
+Comando:
+python -m pytest tests/test_constraint_import.py::test_bulk_wide_constraint_counts tests/test_constraint_import.py::test_sparse_1000_by_100_is_not_densified tests/test_constraint_import.py::test_manual_and_imported_lp_are_algebraically_equivalent tests/test_constraint_import.py::test_benchmark_a_biobjective_from_import -vv -W default
+
+Resultado:
+- 50 restricciones anchas: PASS; exactamente 50.
+- 500 restricciones anchas: PASS; exactamente 500.
+- 1.000 restricciones x 100 variables dispersas: PASS; 2.000 coeficientes
+  no nulos y exactamente dos claves de coeficientes por restriccion.
+- LP manual frente a LP importado: PASS; mismo status, x y Z.
+- Benchmark A construido mediante importacion: PASS; siete ponderaciones
+  coinciden con la referencia academica.
+- Resumen: 5 passed, 0 failed, 0 skipped.
+
+VERIFICADOR ESCALABLE
+Comando: python tools/audit/verify_scalable_constraint_input.py
+Salida:
+SCALABLE_CONSTRAINT_INPUT_VERIFICATION
+variables=100
+constraints=500
+nonzeros=900
+input_format=csv_sparse
+solver_status=optimal
+objective_value=1000
+RESULT: PASS (scalable constraint input contract satisfied)
+
+BENCHMARK A Y METODO PONDERADO
+Comando: python tools/audit/verify_weighted_method_exact.py
+Resultado: PASS (pure normalized weighted-sum oracle satisfied)
+
+Comando: python tools/audit/verify_weighted_method_production.py
+Resultado Benchmark A:
+- alpha=(0.0,1.0): x=(0,130), Z1=390, Z2=169, W=1
+- alpha=(0.2,0.8): x=(0,130), Z1=390, Z2=169, W=0.8
+- alpha=(0.4,0.6): x=(80,50), Z1=950, Z2=129, W=0.697550193406
+- alpha=(0.5,0.5): x=(80,50), Z1=950, Z2=129, W=0.734297292319
+- alpha=(0.6,0.4): x=(80,50), Z1=950, Z2=129, W=0.771044391232
+- alpha=(0.8,0.2): x=(80,50), Z1=950, Z2=129, W=0.844538589059
+- alpha=(1.0,0.0): x=(100,0), Z1=1000, Z2=80, W=1
+RESULT: PASS (production normalized weighted-sum contract satisfied)
+
+HIDROELECTRICO
+- Suite tests/test_hydroelectric_e2e.py: 4 passed.
+- Optimo monoobjetivo conservado: Z*=6701.25.
+- Verificador ponderado de produccion: PASS, con anclas de costo 6701.25 y
+  reserva eficiente 100/costo 21416.25; no se cambio la region factible.
+
+INTEGRIDAD NUMERICA
+Comando: python tools/audit/verify_numeric_integrity.py
+Salida:
+expected_x=1.0000000000000001e-09
+published_x=1.0000000000000001e-09
+published_objective=1
+reconstructed_objective_from_published_x=1
+published_lhs=1
+reconstructed_lhs_from_published_x=1
+RESULT: PASS (numeric integrity contract satisfied)
+
+VALIDACION INTERACTIVA STREAMLIT
+Comando: python -m streamlit run streamlit_app.py --server.headless true --server.port 8501
+Resultado: servidor iniciado correctamente y detenido al finalizar.
+
+No habia un navegador registrado en el entorno de automatizacion, por lo que no
+fue posible realizar una inspeccion visual manual. Para conservar evidencia
+reproducible se ejecuto el arnes oficial streamlit.testing.v1.AppTest:
+
+Comando: python tools/audit/verify_streamlit_scalable_input.py
+Salida:
+CASE 1 PASS: TSV paste, 50 constraints, preview<=20, solved all 50
+CASE 2 PASS: CSV UTF-8-SIG, 100 constraints, preview<=20, solved all 100
+CASE 3 PASS: XLSX sheet Modelo, 100 constraints, preview<=20, solved all 100
+CASE 4 PASS: sparse long, 300 constraints, 598 nonzeros, solved all 300
+RESULT: PASS (Streamlit scalable input interaction contract satisfied)
+
+Cada recorrido utilizo los widgets reales para validar, previsualizar y aplicar;
+comprobo persistencia en session_state, una vista de como maximo 20 filas y que
+el solver recibiera todas las restricciones aplicadas.
+
+PYTEST COMPLETO
+Comando: python -m pytest -ra -W default
+Resultado:
+collected 124 items
+tests/test_constraint_import.py ...........................              [ 21%]
+tests/test_custom_variables.py ......                                    [ 26%]
+tests/test_hydroelectric_e2e.py ....                                     [ 29%]
+tests/test_interpretation.py ........                                    [ 35%]
+tests/test_lexicographic_payoff.py ............                          [ 45%]
+tests/test_lp_core.py ............                                       [ 55%]
+tests/test_model_io.py ............                                      [ 65%]
+tests/test_model_signature.py .......                                    [ 70%]
+tests/test_numeric_integrity.py .......                                  [ 76%]
+tests/test_plotting_extended.py ....                                     [ 79%]
+tests/test_streamlit_integrity.py .....                                  [ 83%]
+tests/test_weighted_method.py ....................                       [100%]
+124 passed, 0 failed, 0 skipped, 1 warning in 9.42s
+
+COMPILEALL
+Comando: python -m compileall -q src streamlit_app.py tools/audit
+Resultado: PASS (exit code 0, sin salida).
+
+WARNINGS RELEVANTES
+- PytestCacheWarning: el entorno administrado no permitio crear .pytest_cache;
+  no afecta los resultados de las pruebas.
+- AppTest informa missing ScriptRunContext en modo bare; es esperado por el
+  arnes oficial fuera del servidor.
+- plotting.py emitio Tight layout not applied al graficar 100/300 resultados.
+  La grafica no intervino en la importacion ni en el modelo resuelto; la
+  correccion general de plotting esta fuera del alcance de Fase 3A.
+
+ARCHIVOS DE PRODUCCION CREADOS
+- src/solver_optimizador/constraint_import.py
+- src/solver_optimizador/input_application.py
+
+ARCHIVOS DE PRODUCCION MODIFICADOS
+- src/solver_optimizador/__init__.py
+- src/solver_optimizador/lp_solver.py
+- src/solver_optimizador/model_io.py
+- src/solver_optimizador/multiobjective.py
+- src/solver_optimizador/signature.py
+- streamlit_app.py
+
+TESTS Y VERIFICADORES
+- tests/test_constraint_import.py (creado)
+- tests/test_model_io.py (adaptado al contrato canonico disperso)
+- tests/test_streamlit_integrity.py (ampliado)
+- tools/audit/verify_scalable_constraint_input.py (creado)
+- tools/audit/verify_streamlit_scalable_input.py (creado)
+
+DOCUMENTACION
+- README.md
+- docs/STATUS.md
+- docs/ENTRADA_ESCALABLE_MODELOS.md (creado)
+- docs/audit_evidence/scalable_model_input_validation.txt (este archivo)
+
+CONFIRMACION DE ALCANCE
+- Backend sin cambios: Pyomo + APPSI HiGHS.
+- No se instalo ni integro Gurobi.
+- No se modificaron normalizacion, formula W, Pareto ni metodo biobjetivo.
+- La unica modificacion en lp_solver.py/multiobjective.py itera los terminos
+  dispersos equivalentes en vez de recorrer ceros de todas las variables.
+- No se implementaron conjuntos, parametros, familias indexadas ni AST.
+- AUD-CRIT-01 y AUD-HIGH-01 permanecen corregidos.
