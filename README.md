@@ -115,6 +115,20 @@ El modelo hidroeléctrico biobjetivo corregido está versionado en formato
 disperso dentro de `models/`. Consulte
 [`docs/EJECUTOR_MODELOS_CONSOLA.md`](docs/EJECUTOR_MODELOS_CONSOLA.md).
 
+### Scripts académicos portables
+
+Para evaluaciones que requieren entregar únicamente un programa y su modelo,
+`exports/` contiene dos ejecutores autónomos, sin imports internos del
+repositorio:
+
+```powershell
+.\.venv\Scripts\python.exe exports\metodo_restricciones.py models\hidroelectrica_biobjetivo.json --primary 1 --r 6
+.\.venv\Scripts\python.exe exports\metodo_ponderaciones.py models\hidroelectrica_biobjetivo.json --num-weights 6
+```
+
+Cada archivo puede copiarse fuera del repositorio junto con un JSON de esquema
+1.0. Consulte [`docs/SCRIPTS_ACADEMICOS_CONSOLA.md`](docs/SCRIPTS_ACADEMICOS_CONSOLA.md).
+
 ---
 
 ## 📦 Estructura del Código
@@ -146,6 +160,9 @@ solver-optimizador/
 ├── scripts/
 │   ├── demo_metodo_restricciones.py # Demostración ε-constraint en consola
 │   └── solve_model.py                # Ejecutor general de modelos JSON
+├── exports/
+│   ├── metodo_restricciones.py       # Script académico portable ε-constraint
+│   └── metodo_ponderaciones.py       # Script académico portable normalizado
 ├── models/
 │   └── hidroelectrica_biobjetivo.json # Modelo biobjetivo disperso de 4 períodos
 ├── verify_ampl_highs.py          # Verificacion base de AMPL
@@ -175,6 +192,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/METODO_PONDERACIONES.md`](docs/METODO_PONDERACIONES.md): Especificación matemática normativa de la suma ponderada normalizada.
 * [`docs/METODO_RESTRICCIONES.md`](docs/METODO_RESTRICCIONES.md): Formulación, API y demostración del método de las restricciones en backend.
 * [`docs/EJECUTOR_MODELOS_CONSOLA.md`](docs/EJECUTOR_MODELOS_CONSOLA.md): Carga y resolución general de modelos JSON desde consola.
+* [`docs/SCRIPTS_ACADEMICOS_CONSOLA.md`](docs/SCRIPTS_ACADEMICOS_CONSOLA.md): Entrega, dependencias, formato y uso de los dos scripts académicos portables.
 * [`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md): Formatos ancho/disperso, CSV/XLSX y aplicación atómica de modelos grandes.
 * [`docs/MODELADO_INDEXADO.md`](docs/MODELADO_INDEXADO.md): Conjuntos, parámetros, familias, sintaxis segura, expansión y trazabilidad.
 * [`docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`](docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md): Documento histórico sobre la selección secundaria de anclas; no define el método vigente.

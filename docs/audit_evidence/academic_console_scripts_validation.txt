@@ -1,0 +1,107 @@
+VALIDACION — SCRIPTS ACADEMICOS PORTABLES DE CONSOLA
+Fecha: 2026-09-09
+Repositorio: NelsonBaza/solver-optimizador
+Rama de entrega: feat/academic-console-scripts
+Base de la rama: 08f36dd4bbb69519b214ba6a317ab105588e2a08
+
+ETAPA A — EVIDENCIA OBSERVADA
+1. Estado inicial limpio tras apartar de forma reversible dos archivos no
+   versionados que coincidían por hash con la rama codex/feature-close-app-control.
+2. Cadena confirmada con merge-base y ancestor:
+   1eb065098cf51403e7f9672e2f37a4ef0dffa6c1
+     -> c2bc2a60f69ee403370f950bccbbde98c6d87852
+     -> 08f36dd4bbb69519b214ba6a317ab105588e2a08
+3. Suite antes de integrar: 245 passed, 0 failed, 1 warning conocido de
+   permisos sobre .pytest_cache.
+4. No había GitHub CLI funcional ni navegador integrado disponible. Se aplicó:
+   git merge --ff-only feat/console-model-runner-hydroelectric
+5. Resultado: fast-forward de main 1eb0650..08f36dd, sin duplicar ni reescribir
+   commits. Push a origin/main exitoso.
+6. Validación posterior en main:
+   .\.venv\Scripts\python.exe -m compileall -q src scripts tests
+   Resultado: exit code 0.
+   .\.venv\Scripts\python.exe -m pytest
+   Resultado: 245 passed, 0 failed, 1 warning conocido.
+7. Se ejecutaron ambos métodos con scripts/solve_model.py sobre el modelo
+   hidroeléctrico. Ambos terminaron con exit code 0.
+
+ETAPA B — EVIDENCIA OBSERVADA
+Archivos académicos:
+- exports/metodo_restricciones.py
+- exports/metodo_ponderaciones.py
+
+Los dos archivos se analizaron mediante AST: no importan solver_optimizador,
+src.solver_optimizador ni otro módulo interno del repositorio.
+
+Comparación numérica automática contra el backend oficial:
+- Benchmark A MAX/MAX.
+- Modelo hidroeléctrico MIN/MAX.
+- Problema artificial MAX/MAX.
+- Problema artificial MAX/MIN.
+- Epsilon con ambos objetivos como principal.
+- Ponderaciones uniformes, incluidos pesos extremos.
+
+Se compararon matrices de pagos, vectores completos x, Z1, Z2, niveles E,
+operadores epsilon, pesos, N1, N2, W, soluciones únicas y clasificación Pareto.
+Tolerancia absoluta principal: 1e-6; niveles y rangos: 1e-8.
+
+Prueba específica nueva:
+.\.venv\Scripts\python.exe -m pytest tests\test_academic_console_scripts.py -q
+Resultado: 9 passed, 0 failed, 1 warning conocido.
+
+Pruebas de regresión solicitadas:
+.\.venv\Scripts\python.exe -m pytest tests\test_epsilon_constraint.py tests\test_weighted_method.py tests\test_solve_model_cli.py -q
+Resultado: 56 passed, 0 failed, 1 warning conocido.
+
+Compilación completa:
+.\.venv\Scripts\python.exe -m compileall -q src scripts exports tests
+Resultado: exit code 0.
+
+Suite completa:
+.\.venv\Scripts\python.exe -m pytest
+Resultado: 254 passed, 0 failed, 1 warning conocido.
+
+Portabilidad real:
+- se copió únicamente cada script y models/hidroelectrica_biobjetivo.json a un
+  directorio temporal;
+- desde ese directorio importlib.util.find_spec('solver_optimizador') devolvió
+  None;
+- cada script fue ejecutado allí con el intérprete del entorno y terminó con
+  exit code 0;
+- no se copió ningún otro archivo del repositorio.
+
+HIDROELECTRICA — RESULTADOS OBSERVADOS POR RESTRICCIONES
+Matriz de pagos:
+opt_Z1 = (Z1, Z2) = (6701.25, 40)
+opt_Z2 = (Z1, Z2) = (21416.25, 100)
+
+Niveles E2: [40, 50, 60, 70, 80, 90, 100]
+V4=40  -> Z1=6701.25
+V4=50  -> Z1=9153.75
+V4=60  -> Z1=11606.25
+V4=70  -> Z1=14058.75
+V4=80  -> Z1=16511.25
+V4=90  -> Z1=18963.75
+V4=100 -> Z1=21416.25
+
+Todos los puntos satisfacen Z1 = 245.25*V4 - 3108.75 dentro de 1e-6. Las siete
+soluciones fueron clasificadas como no dominadas.
+
+HIDROELECTRICA — RESULTADOS OBSERVADOS POR PONDERACIONES
+Pesos: [(0,1), (0.2,0.8), (0.4,0.6), (0.6,0.4), (0.8,0.2), (1,0)]
+Rangos: Z1=[6701.25,21416.25], Delta Z1=14715;
+        Z2=[40,100], Delta Z2=60.
+Las seis corridas coincidieron con solve_biobjective_weighted. Por la frontera
+lineal, produjeron los extremos (21416.25,100) en las tres primeras y
+(6701.25,40) en las tres últimas; se observaron cuatro vectores únicos debido
+a representantes distintos de caras óptimas degeneradas, igual que el backend.
+
+INTERPRETACION
+La coincidencia incluye los vectores de decisión, no solo los valores objetivo.
+Esto demuestra que los scripts reproducen la formulación y la política de
+representantes del backend vigente para los casos validados.
+
+CONCLUSION
+Los scripts son portables como pares .py + .json, reproducen los dos únicos
+métodos multiobjetivo vigentes y no modifican Streamlit ni los tres módulos
+matemáticos protegidos.
