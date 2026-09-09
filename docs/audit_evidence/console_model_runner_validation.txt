@@ -1,0 +1,81 @@
+VALIDACION DEL EJECUTOR GENERAL DE MODELOS BIOBJETIVO EN CONSOLA
+Fecha: 2026-09-09
+Repositorio: solver-optimizador
+Rama: feat/console-model-runner-hydroelectric
+SHA inicial/base: c2bc2a60f69ee403370f950bccbbde98c6d87852
+
+ALCANCE VERIFICADO
+  - Carga JSON UTF-8 mediante deserialize_model().
+  - Construccion mediante build_biobjective_problem_from_state().
+  - Despacho epsilon mediante solve_biobjective_epsilon_constraint().
+  - Despacho weighted mediante solve_biobjective_weighted().
+  - Sin cambios en streamlit_app.py.
+
+MODELO VERSIONADO
+Archivo:
+  models\hidroelectrica_biobjetivo.json
+Resultado de validacion estructural:
+  - problem.type: Biobjetivo
+  - 24 variables continuas no negativas por definicion del backend
+  - 28 restricciones originales
+  - Z1: MIN, coeficientes no nulos GT1..GT4 = 100
+  - Z2: MAX, unico coeficiente no nulo V4 = 1
+  - Representacion JSON dispersa: ningun coeficiente almacenado es cero
+  - Sin capacidad termica, rampas, costos adicionales ni restricciones terminales
+
+LINEA BASE
+Comando:
+  & .\.venv\Scripts\python.exe -m pytest
+Resultado:
+  234 passed, 0 failed, 1 warning en 14.83 s.
+
+PRUEBAS ESPECIFICAS
+Comando:
+  & .\.venv\Scripts\python.exe -m pytest tests\test_solve_model_cli.py -q
+Resultado:
+  11 passed, 0 failed, 1 warning en 2.42 s.
+
+VALIDACION FINAL COMPLETA
+Comandos:
+  & .\.venv\Scripts\python.exe -m compileall -q src scripts tests
+  & .\.venv\Scripts\python.exe -m pytest
+Resultado:
+  compileall: PASS, codigo de salida 0.
+  pytest: 245 passed, 0 failed, 1 warning en 16.08 s.
+  Warning no funcional: pytest no pudo escribir .pytest_cache por permisos.
+
+EJECUCION EPSILON REPRODUCIBLE
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6
+Resultado:
+  Codigo de salida 0.
+  Matriz de pagos: (Z1,Z2)=(6701.25,40) y (21416.25,100).
+  E2=[40,50,60,70,80,90,100].
+  7 corridas optimas, 7 soluciones unicas y 7 no dominadas.
+  Frontera observada:
+    V4=40  -> Z1=6701.25
+    V4=50  -> Z1=9153.75
+    V4=60  -> Z1=11606.25
+    V4=70  -> Z1=14058.75
+    V4=80  -> Z1=16511.25
+    V4=90  -> Z1=18963.75
+    V4=100 -> Z1=21416.25
+  Todas satisfacen Z1=245.25*V4-3108.75 dentro de 1e-6.
+
+EJECUCION WEIGHTED REPRODUCIBLE
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method weighted --num-weights 6
+Resultado:
+  Codigo de salida 0.
+  6 corridas ponderadas optimas.
+  Extremos conservados: (6701.25,40) y (21416.25,100).
+
+CONTROL DE REGRESIONES
+  - Suite completa: PASS.
+  - tests/test_epsilon_constraint.py: PASS dentro de la suite.
+  - tests/test_weighted_method.py: PASS dentro de la suite.
+  - git diff --exit-code -- streamlit_app.py: codigo de salida 0.
+
+LIMITACIONES DE HERRAMIENTAS
+  No existe formateador, linter ni comprobador de tipos configurado en
+  pyproject.toml. No se instalaron dependencias nuevas.

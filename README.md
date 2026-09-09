@@ -98,6 +98,23 @@ como principal y `r=5`, se ejecuta desde PowerShell con:
 Consulte la formulación y la estructura completa del resultado en
 [`docs/METODO_RESTRICCIONES.md`](docs/METODO_RESTRICCIONES.md).
 
+### Ejecutor general de modelos en consola
+
+Los modelos biobjetivo guardados con el esquema JSON 1.0 pueden resolverse sin
+la interfaz gráfica mediante `scripts/solve_model.py`:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6
+```
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method weighted --num-weights 6
+```
+
+El modelo hidroeléctrico biobjetivo corregido está versionado en formato
+disperso dentro de `models/`. Consulte
+[`docs/EJECUTOR_MODELOS_CONSOLA.md`](docs/EJECUTOR_MODELOS_CONSOLA.md).
+
 ---
 
 ## 📦 Estructura del Código
@@ -127,7 +144,10 @@ solver-optimizador/
 ├── benchmark_a_pyomo.py          # Benchmark A ejecutable con Pyomo
 ├── benchmark_a_multiobjective.py # Benchmark A ejecutable con AMPL
 ├── scripts/
-│   └── demo_metodo_restricciones.py # Demostración ε-constraint en consola
+│   ├── demo_metodo_restricciones.py # Demostración ε-constraint en consola
+│   └── solve_model.py                # Ejecutor general de modelos JSON
+├── models/
+│   └── hidroelectrica_biobjetivo.json # Modelo biobjetivo disperso de 4 períodos
 ├── verify_ampl_highs.py          # Verificacion base de AMPL
 │
 ├── requirements-pyomo.txt        # Dependencias de Pyomo + HiGHS
@@ -154,6 +174,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/DECISIONS.md`](docs/DECISIONS.md): Registro histórico de decisiones arquitectónicas (ADR-001 a ADR-007).
 * [`docs/METODO_PONDERACIONES.md`](docs/METODO_PONDERACIONES.md): Especificación matemática normativa de la suma ponderada normalizada.
 * [`docs/METODO_RESTRICCIONES.md`](docs/METODO_RESTRICCIONES.md): Formulación, API y demostración del método de las restricciones en backend.
+* [`docs/EJECUTOR_MODELOS_CONSOLA.md`](docs/EJECUTOR_MODELOS_CONSOLA.md): Carga y resolución general de modelos JSON desde consola.
 * [`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md): Formatos ancho/disperso, CSV/XLSX y aplicación atómica de modelos grandes.
 * [`docs/MODELADO_INDEXADO.md`](docs/MODELADO_INDEXADO.md): Conjuntos, parámetros, familias, sintaxis segura, expansión y trazabilidad.
 * [`docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`](docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md): Documento histórico sobre la selección secundaria de anclas; no define el método vigente.
