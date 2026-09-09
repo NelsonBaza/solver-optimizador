@@ -80,9 +80,23 @@ indexado** reemplaza el estado explícito de forma atómica. Consulte
 ### Qué Todavía NO Puede Resolver (Limitaciones Actuales):
 * Variables enteras o binarias (MILP).
 * Problemas no lineales continuos o enteros (NLP / MINLP).
-* Método de $\varepsilon$-restricciones (programado para el siguiente hito).
 * Algoritmos metaheurísticos / evolutivos (NSGA-II / pymoo).
 * Programación por metas o programación compromiso.
+
+### Método de las restricciones en backend
+
+El método de $\varepsilon$-restricciones ya está disponible en el backend para
+problemas LP biobjetivo, con cualquiera de los dos objetivos como principal y
+compatibilidad MAX/MIN. Permanece deliberadamente fuera de la interfaz
+Streamlit. La demostración reproducible del Benchmark A, con ambos objetivos
+como principal y `r=5`, se ejecuta desde PowerShell con:
+
+```powershell
+& ".\.venv\Scripts\python.exe" scripts\demo_metodo_restricciones.py
+```
+
+Consulte la formulación y la estructura completa del resultado en
+[`docs/METODO_RESTRICCIONES.md`](docs/METODO_RESTRICCIONES.md).
 
 ---
 
@@ -97,6 +111,7 @@ solver-optimizador/
 │       ├── lp_models.py          # Estructuras de datos (Problem, Objective, Constraint, Solution)
 │       ├── lp_solver.py          # Motor LP monoobjetivo (Pyomo + APPSI HiGHS)
 │       ├── multiobjective.py     # Motor multiobjetivo (matriz de pagos, pesos, Pareto)
+│       ├── epsilon_constraint.py # Método de restricciones para LP biobjetivo
 │       ├── constraint_import.py  # Parseo tabular ancho/disperso y XLSX solver-agnostic
 │       ├── input_application.py  # Aplicacion atomica de lotes a estado
 │       ├── indexed_model.py      # Especificacion indexada serializable
@@ -111,6 +126,8 @@ solver-optimizador/
 │
 ├── benchmark_a_pyomo.py          # Benchmark A ejecutable con Pyomo
 ├── benchmark_a_multiobjective.py # Benchmark A ejecutable con AMPL
+├── scripts/
+│   └── demo_metodo_restricciones.py # Demostración ε-constraint en consola
 ├── verify_ampl_highs.py          # Verificacion base de AMPL
 │
 ├── requirements-pyomo.txt        # Dependencias de Pyomo + HiGHS
@@ -136,6 +153,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/STATUS.md`](docs/STATUS.md): Fotografía técnica del estado actual del proyecto.
 * [`docs/DECISIONS.md`](docs/DECISIONS.md): Registro histórico de decisiones arquitectónicas (ADR-001 a ADR-007).
 * [`docs/METODO_PONDERACIONES.md`](docs/METODO_PONDERACIONES.md): Especificación matemática normativa de la suma ponderada normalizada.
+* [`docs/METODO_RESTRICCIONES.md`](docs/METODO_RESTRICCIONES.md): Formulación, API y demostración del método de las restricciones en backend.
 * [`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md): Formatos ancho/disperso, CSV/XLSX y aplicación atómica de modelos grandes.
 * [`docs/MODELADO_INDEXADO.md`](docs/MODELADO_INDEXADO.md): Conjuntos, parámetros, familias, sintaxis segura, expansión y trazabilidad.
 * [`docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`](docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md): Documento histórico sobre la selección secundaria de anclas; no define el método vigente.

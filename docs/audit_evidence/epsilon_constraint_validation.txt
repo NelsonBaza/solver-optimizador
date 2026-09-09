@@ -1,0 +1,70 @@
+VALIDACION DEL METODO DE LAS RESTRICCIONES (EPSILON-CONSTRAINT)
+Fecha: 2026-09-09
+Repositorio: solver-optimizador
+Rama: feat/metodo-restricciones-console
+Base de la rama: 1eb065098cf51403e7f9672e2f37a4ef0dffa6c1
+
+FORMULACION VERIFICADA
+E_k,t = Zk_min + (t/r)(Zk_max - Zk_min), t = 0, ..., r.
+Si Zk es MAX: Zk(x) >= E_k,t.
+Si Zk es MIN: Zk(x) <= E_k,t.
+Cada nivel conserva todas las restricciones originales y se envia nuevamente a
+solve_lp. El barrido no utiliza pesos, suma ponderada ni normalizacion.
+
+ENTORNO OBSERVADO
+Comandos:
+  Get-Command python
+  python --version
+  .\.venv\Scripts\python.exe --version
+Resultado:
+  Interprete activo y entorno del proyecto: .venv\Scripts\python.exe
+  Python 3.13.1
+
+LINEA BASE ANTES DE LOS CAMBIOS
+Comando:
+  & .\.venv\Scripts\python.exe -m pytest
+Resultado:
+  209 passed, 0 failed, 1 warning en 18.69 s.
+  Warning no funcional: pytest no pudo escribir .pytest_cache por permisos.
+
+PRUEBAS ESPECIFICAS
+Comando:
+  & .\.venv\Scripts\python.exe -m pytest tests\test_epsilon_constraint.py -q
+Resultado:
+  25 passed, 0 failed, 1 warning en 0.89 s.
+
+VALIDACION FINAL COMPLETA
+Comandos:
+  & .\.venv\Scripts\python.exe -m compileall -q src scripts tests
+  & .\.venv\Scripts\python.exe -m pytest
+Resultado:
+  compileall: PASS, codigo de salida 0.
+  pytest: 234 passed, 0 failed, 1 warning en 14.56 s.
+  Warning no funcional: pytest no pudo escribir .pytest_cache por permisos.
+
+DEMOSTRACION REPRODUCIBLE
+Comando:
+  & .\.venv\Scripts\python.exe scripts\demo_metodo_restricciones.py
+Resultado:
+  PASS, codigo de salida 0.
+  Matriz de pagos: opt_Z1=(Z1=1000, Z2=80),
+                   opt_Z2=(Z1=390, Z2=169).
+
+  Z1 principal, Z2 restringido, r=5:
+    E2 = [80, 97.8, 115.6, 133.4, 151.2, 169]
+    6 corridas optimas, 6 soluciones unicas, 6 no dominadas.
+
+  Z2 principal, Z1 restringido, r=5:
+    E1 = [390, 512, 634, 756, 878, 1000]
+    6 corridas optimas, 6 soluciones unicas, 6 no dominadas.
+
+CONTROL DE REGRESIONES
+  src/solver_optimizador/multiobjective.py: sin cambios.
+  src/solver_optimizador/lp_solver.py: sin cambios.
+  streamlit_app.py: sin cambios.
+  Suite completa: PASS.
+
+HERRAMIENTAS DE CALIDAD
+  No hay formateador, linter ni comprobador de tipos configurados en
+  pyproject.toml. ruff y mypy no estan disponibles en el entorno, por lo que no
+  se instalaron dependencias nuevas para esta tarea.

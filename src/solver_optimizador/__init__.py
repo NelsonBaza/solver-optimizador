@@ -1,6 +1,6 @@
 """
 solver_optimizador: Suite modular de optimizacion matematica.
-Modulo base para LP monoobjetivo y biobjetivo por ponderaciones.
+Modulo base para LP monoobjetivo y metodos biobjetivo.
 """
 
 from .lp_models import (
@@ -22,6 +22,11 @@ from .multiobjective import (
     normalize_objective_value,
     solve_biobjective_weighted,
     solve_lexicographic_extreme,
+)
+from .epsilon_constraint import (
+    EpsilonConstraintSolution,
+    generate_epsilon_levels,
+    solve_biobjective_epsilon_constraint,
 )
 from .signature import build_model_signature
 from .interpretation import interpret_mono_solution, interpret_biobjective_solution
@@ -100,6 +105,7 @@ __all__ = [
     "ConstraintResult",
     "LPSolution",
     "MultiobjectiveSolution",
+    "EpsilonConstraintSolution",
     "is_finite_number",
     "build_model_signature",
     "interpret_mono_solution",
@@ -158,4 +164,6 @@ __all__ = [
     "solve_lexicographic_extreme",
     "generate_weight_combinations",
     "normalize_objective_value",
+    "generate_epsilon_levels",
+    "solve_biobjective_epsilon_constraint",
 ]
