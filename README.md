@@ -77,6 +77,12 @@ dispersos y procedencia. La vista previa no modifica el modelo; **Aplicar modelo
 indexado** reemplaza el estado explícito de forma atómica. Consulte
 [`docs/MODELADO_INDEXADO.md`](docs/MODELADO_INDEXADO.md).
 
+En consola, el esquema JSON unificado 1.1 permite combinar en un solo
+`problema.json` variables y restricciones explícitas con familias indexadas 1D
+o 2D. El producto cartesiano se expande a la misma representación canónica
+dispersa antes de construir el problema Pyomo. El esquema 1.0 continúa siendo
+compatible sin cambios.
+
 ### Qué Todavía NO Puede Resolver (Limitaciones Actuales):
 * Variables enteras o binarias (MILP).
 * Problemas no lineales continuos o enteros (NLP / MINLP).
@@ -111,6 +117,14 @@ la interfaz gráfica mediante `scripts/solve_model.py`:
 .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method weighted --num-weights 6
 ```
 
+Por defecto, cada ejecución correcta guarda el gráfico de la frontera obtenida
+en `results/<modelo>_<metodo>_pareto.png`. Use `--no-plot` para desactivarlo.
+El mismo runner acepta JSON 1.0 explícito y JSON 1.1 explícito, indexado o mixto:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py models\ejemplo_familias_2d.json --method weighted --num-weights 6
+```
+
 El modelo hidroeléctrico biobjetivo corregido está versionado en formato
 disperso dentro de `models/`. Consulte
 [`docs/EJECUTOR_MODELOS_CONSOLA.md`](docs/EJECUTOR_MODELOS_CONSOLA.md).
@@ -143,6 +157,8 @@ solver-optimizador/
 │       ├── lp_solver.py          # Motor LP monoobjetivo (Pyomo + APPSI HiGHS)
 │       ├── multiobjective.py     # Motor multiobjetivo (matriz de pagos, pesos, Pareto)
 │       ├── epsilon_constraint.py # Método de restricciones para LP biobjetivo
+│       ├── unified_model.py      # Compilador JSON 1.1 explícito/indexado 1D-2D
+│       ├── pareto_plot.py        # Gráficos PNG headless de frontera de Pareto
 │       ├── constraint_import.py  # Parseo tabular ancho/disperso y XLSX solver-agnostic
 │       ├── input_application.py  # Aplicacion atomica de lotes a estado
 │       ├── indexed_model.py      # Especificacion indexada serializable
@@ -164,7 +180,9 @@ solver-optimizador/
 │   ├── metodo_restricciones.py       # Script académico portable ε-constraint
 │   └── metodo_ponderaciones.py       # Script académico portable normalizado
 ├── models/
-│   └── hidroelectrica_biobjetivo.json # Modelo biobjetivo disperso de 4 períodos
+│   ├── hidroelectrica_biobjetivo.json # Modelo biobjetivo disperso de 4 períodos
+│   ├── ejemplo_familias_1d.json       # Ejemplo 1.1 con 40 filas generadas
+│   └── ejemplo_familias_2d.json       # Ejemplo 1.1 mixto sobre J × M
 ├── verify_ampl_highs.py          # Verificacion base de AMPL
 │
 ├── requirements-pyomo.txt        # Dependencias de Pyomo + HiGHS
@@ -192,6 +210,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/METODO_PONDERACIONES.md`](docs/METODO_PONDERACIONES.md): Especificación matemática normativa de la suma ponderada normalizada.
 * [`docs/METODO_RESTRICCIONES.md`](docs/METODO_RESTRICCIONES.md): Formulación, API y demostración del método de las restricciones en backend.
 * [`docs/EJECUTOR_MODELOS_CONSOLA.md`](docs/EJECUTOR_MODELOS_CONSOLA.md): Carga y resolución general de modelos JSON desde consola.
+* [`docs/MANUAL_USO_CONSOLA.md`](docs/MANUAL_USO_CONSOLA.md): Manual para preparar JSON, resolver y leer tablas y gráficos.
 * [`docs/SCRIPTS_ACADEMICOS_CONSOLA.md`](docs/SCRIPTS_ACADEMICOS_CONSOLA.md): Entrega, dependencias, formato y uso de los dos scripts académicos portables.
 * [`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md): Formatos ancho/disperso, CSV/XLSX y aplicación atómica de modelos grandes.
 * [`docs/MODELADO_INDEXADO.md`](docs/MODELADO_INDEXADO.md): Conjuntos, parámetros, familias, sintaxis segura, expansión y trazabilidad.

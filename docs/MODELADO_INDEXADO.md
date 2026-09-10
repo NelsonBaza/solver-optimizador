@@ -1,14 +1,14 @@
-# Modelado indexado y familias unidimensionales
+# Modelado indexado y JSON unificado
 
 **Vigencia:** Fase 3B
 **Backend de resolución:** Pyomo + APPSI HiGHS
 
-El modelado indexado permite escribir una regla una vez y expandirla sobre un
-conjunto ordenado de enteros. La especificación y su compilador son
-solver-agnostic: no crean objetos Pyomo ni llaman al solver.
+El modelado indexado permite escribir una regla una vez y expandirla sobre uno
+o dos conjuntos ordenados de enteros. La compilación es solver-agnostic: no
+crea objetos Pyomo ni llama al solver.
 
 ```text
-especificación indexada
+problema.json (esquema 1.1)
   -> validación y parser lineal seguro
   -> variables y restricciones explícitas canónicas dispersas
   -> problem_builder existente
@@ -19,9 +19,10 @@ especificación indexada
 
 - **Conjunto:** rango entero inclusivo, por ejemplo `T = 1..24`.
 - **Parámetro escalar:** dato único, por ejemplo `V0 = 80`.
-- **Parámetro indexado:** exactamente un dato para cada índice, como
-  `demanda[t]`. No se rellenan faltantes con cero.
-- **Variable indexada:** una familia como `V[T]`, que genera `V_1` a `V_24`.
+- **Parámetro indexado:** exactamente un dato para cada índice o par de índices,
+  como `demanda[t]` o `costo[j,m]`. No se rellenan faltantes con cero.
+- **Variable indexada:** una familia como `V[T]` o `X[J,M]`, que genera nombres
+  canónicos como `V_24` o `X_3_2`.
 - **Familia de restricciones:** una expresión y un rango que se aplican a cada
   índice.
 - **Expansión:** transformación determinista de familias a la representación
@@ -35,12 +36,67 @@ Demanda[t]: GH[t] + GT[t] >= demanda[t]
 
 equivale a generar 24 restricciones, `Demanda_1` a `Demanda_24`.
 
-## Especificación soportada
+## Dos rutas compatibles
 
-En esta fase cada conjunto es unidimensional, entero, ordenado, inclusivo y no
-vacío. Las variables generadas son continuas y no negativas, igual que en el
-motor vigente. La convención de nombre explícito es `FAMILIA_INDICE`, por
-ejemplo `GT_12`.
+La especificación indexada histórica de la interfaz continúa siendo 1D y usa
+`indexed_schema_version = "1.0"`. No se modificó su significado ni su API.
+
+La herramienta principal de consola acepta además `schema_version = "1.1"`.
+Este es el formato recomendado para usuarios nuevos y combina en el mismo
+objeto `problem`:
+
+### Contrato del esquema 1.1
+
+| Ruta | Obligatorio | Contenido |
+|---|---|---|
+| `schema_version` | Sí | Literal `"1.1"` |
+| `metadata` | No | `name` y `description` |
+| `problem.type` | Sí | `Monoobjetivo` o `Biobjetivo` |
+| `problem.variables` | No | Nombres de variables explícitas |
+| `problem.sets` | No | Rangos enteros inclusivos `start..end` |
+| `problem.parameters` | No | Valores escalares o tablas 1D/2D completas |
+| `problem.variable_families` | No | Familias sobre uno o dos conjuntos |
+| `problem.bio_objectives` | Para biobjetivo | `obj1` y `obj2`, cada uno con sentido, coeficientes explícitos y/o `indexed_terms` |
+| `problem.constraints` | No | Restricciones explícitas dispersas |
+| `problem.constraint_families` | No | Expresiones lineales sobre uno o dos índices |
+
+Las listas explícitas y las familias son opcionales por separado, pero su
+combinación debe producir al menos una variable y una restricción. Los campos
+no presentes equivalen a colecciones vacías, no a un segundo tipo de archivo.
+
+```json
+{
+  "sets": {"J": {"start": 1, "end": 3}, "M": {"start": 1, "end": 2}},
+  "parameters": {
+    "capacidad": {"value": 5},
+    "costo": {
+      "indices": ["j", "m"],
+      "sets": ["J", "M"],
+      "values": {"1,1": 1, "1,2": 1.2, "2,1": 1.4, "2,2": 1.6,
+                 "3,1": 1.8, "3,2": 2}
+    }
+  },
+  "variables": ["reserva"],
+  "variable_families": [
+    {"name": "X", "indices": ["j", "m"], "sets": ["J", "M"]}
+  ],
+  "constraints": [
+    {"name": "Especial", "coefficients": {"X[1,1]": 1},
+     "operator": ">=", "rhs": 1}
+  ],
+  "constraint_families": [
+    {"name": "Cota", "indices": ["j", "m"], "sets": ["J", "M"],
+     "expression": "X[j,m] <= capacidad"}
+  ]
+}
+```
+
+## Especificación y nombres expandidos
+
+Cada conjunto es entero, ordenado, inclusivo y no vacío. Una familia admite una
+o dos dimensiones y genera el producto cartesiano cuando declara dos. Las
+variables son continuas y no negativas. Las convenciones canónicas son
+`FAMILIA_INDICE` y `FAMILIA_INDICE1_INDICE2`.
 
 Una familia declara nombre, conjunto, símbolo de índice, límites opcionales y
 expresión. Una condición inicial se expresa acotando el rango:
@@ -56,8 +112,8 @@ fuera del conjunto. Los índices no se envuelven circularmente.
 
 ## Objetivos
 
-Los objetivos se definen mediante términos estructurados, no mediante
-comprensiones Python. Cada término indica familia, conjunto, rango y un
+Los objetivos pueden mezclar `coefficients` explícitos e `indexed_terms`. Cada
+término indexado indica familia, símbolos, conjuntos, rango opcional y un
 coeficiente numérico o paramétrico:
 
 ```text
@@ -81,8 +137,8 @@ X[t] / 3600 = Y[t]
 V[t] - V[t-1] + Turb[t] = aporte[t]
 ```
 
-El parser usa el árbol sintáctico únicamente para inspección estática. No
-ejecuta el contenido introducido.
+El parser usa el árbol sintáctico únicamente para inspección estática. No usa
+`eval()` ni `exec()` y no ejecuta el contenido introducido.
 
 ## Sintaxis rechazada
 
@@ -125,9 +181,10 @@ La salida conserva metadatos `variable -> familia/índice` y
 La vista previa está limitada a 20 elementos pero la aplicación y el solver
 reciben todo el modelo.
 
-La especificación fuente usa su propio `indexed_schema_version = "1.0"` y se
-puede descargar/cargar como JSON, separada del JSON explícito histórico. La
-aplicación sólo reemplaza el estado después de validar y compilar por completo.
+La especificación fuente histórica de la UI usa su propio
+`indexed_schema_version = "1.0"`. Para consola, el esquema unificado 1.1 guarda
+la fuente explícita e indexada en un solo archivo y compila todo antes de llamar
+al builder.
 Si luego se edita el modelo explícito por la ruta manual, CSV, XLSX o dispersa,
 `indexed_source_status` cambia a `stale`; la interfaz no afirma que ambas fuentes
 sigan sincronizadas.
@@ -160,8 +217,8 @@ También existe una especificación hidroeléctrica usada únicamente para proba
 equivalencia algebraica con el fixture vigente (24 variables, 28 restricciones,
 `Z*=6701.25`). Esa prueba no certifica fidelidad física al enunciado fuente.
 
-No se soportan todavía índices múltiples `(i,j)`, arcos, conjuntos arbitrarios,
-dominios enteros/binarios, cotas personalizadas, expresiones no lineales ni un
-lenguaje algebraico general. El backend sigue siendo Pyomo + HiGHS; no se
-integró Gurobi. AUD-HIGH-06 permanece abierto hasta separar IDs internos de los
-nombres visibles.
+El esquema 1.1 de consola soporta uno y dos índices, incluidos desplazamientos
+como `j-1` cuando la referencia permanece dentro del conjunto. No soporta aún
+dimensión arbitraria, conjuntos no enteros, dominios binarios/enteros,
+expresiones no lineales ni un lenguaje algebraico general. El backend continúa
+siendo Pyomo + HiGHS.

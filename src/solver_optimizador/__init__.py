@@ -38,7 +38,9 @@ from .model_io import (
     is_empty_constraint_row,
     sanitize_filename,
     SCHEMA_VERSION,
+    RECOMMENDED_SCHEMA_VERSION,
 )
+from .unified_model import UNIFIED_SCHEMA_VERSION, compile_unified_model_document
 from .problem_builder import (
     build_lp_problem_from_state,
     build_biobjective_problem_from_state,
@@ -93,6 +95,7 @@ from .plotting import (
     plot_constraint_slacks,
     plot_multiobjective_runs,
 )
+from .pareto_plot import prepare_pareto_plot_data, save_pareto_plot
 
 __all__ = [
     "Sense",
@@ -117,11 +120,16 @@ __all__ = [
     "is_empty_constraint_row",
     "sanitize_filename",
     "SCHEMA_VERSION",
+    "RECOMMENDED_SCHEMA_VERSION",
+    "UNIFIED_SCHEMA_VERSION",
+    "compile_unified_model_document",
     "plot_feasible_region_2d",
     "plot_objective_space_2d",
     "plot_variable_values",
     "plot_constraint_slacks",
     "plot_multiobjective_runs",
+    "prepare_pareto_plot_data",
+    "save_pareto_plot",
     "build_lp_problem_from_state",
     "build_biobjective_problem_from_state",
     "ConstraintImportResult",

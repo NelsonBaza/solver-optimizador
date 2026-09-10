@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.1",
+  "metadata": {
+    "name": "Ejemplo técnico mixto de familias 2D",
+    "description": "Validación del producto cartesiano J x M; no representa un ejercicio real de máquinas."
+  },
+  "problem": {
+    "type": "Biobjetivo",
+    "sets": {
+      "J": {"start": 1, "end": 3},
+      "M": {"start": 1, "end": 2}
+    },
+    "parameters": {
+      "capacidad": {"value": 5.0},
+      "costo": {
+        "indices": ["j", "m"],
+        "sets": ["J", "M"],
+        "values": {
+          "1,1": 1.0,
+          "1,2": 1.2,
+          "2,1": 1.4,
+          "2,2": 1.6,
+          "3,1": 1.8,
+          "3,2": 2.0
+        }
+      }
+    },
+    "variables": ["reserva"],
+    "variable_families": [
+      {"name": "X", "indices": ["j", "m"], "sets": ["J", "M"]}
+    ],
+    "bio_objectives": {
+      "obj1": {
+        "sense": "Maximizar",
+        "coefficients": {"reserva": 0.1},
+        "indexed_terms": [
+          {
+            "variable_family": "X",
+            "indices": ["j", "m"],
+            "sets": ["J", "M"],
+            "coefficient": "1"
+          }
+        ]
+      },
+      "obj2": {
+        "sense": "Minimizar",
+        "coefficients": {"reserva": 0.2},
+        "indexed_terms": [
+          {
+            "variable_family": "X",
+            "indices": ["j", "m"],
+            "sets": ["J", "M"],
+            "coefficient": "costo[j,m]"
+          }
+        ]
+      }
+    },
+    "constraints": [
+      {
+        "name": "ReservaMaxima",
+        "coefficients": {"reserva": 1.0},
+        "operator": "<=",
+        "rhs": 2.0
+      },
+      {
+        "name": "CasoEspecial",
+        "coefficients": {"X[1,1]": 1.0},
+        "operator": ">=",
+        "rhs": 1.0
+      }
+    ],
+    "constraint_families": [
+      {
+        "name": "Cota",
+        "indices": ["j", "m"],
+        "sets": ["J", "M"],
+        "expression": "X[j,m] <= capacidad"
+      }
+    ]
+  }
+}

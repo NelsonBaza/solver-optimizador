@@ -229,3 +229,232 @@ def parse_numeric_expression(
     if not result.is_numeric or not math.isfinite(result.constant):
         raise IndexedExpressionError(f"{context}: se esperaba una expresion numerica finita.")
     return result.constant
+
+
+def _expanded_name(symbol: str, indices: tuple[int, ...]) -> str:
+    return "_".join((symbol, *(str(index) for index in indices)))
+
+
+class _MultiIndexAffineParser:
+    """Variante segura para expresiones con uno o dos símbolos de índice."""
+
+    def __init__(
+        self,
+        *,
+        scalar_parameters: Mapping[str, float],
+        indexed_parameters: Mapping[str, Mapping[tuple[int, ...], float]],
+        variable_domains: Mapping[
+            str, tuple[tuple[str, ...], set[tuple[int, ...]]]
+        ],
+        explicit_variables: set[str],
+        index_values: Mapping[str, int],
+        context: str,
+        allow_variables: bool,
+    ) -> None:
+        self.scalar_parameters = scalar_parameters
+        self.indexed_parameters = indexed_parameters
+        self.variable_domains = variable_domains
+        self.explicit_variables = explicit_variables
+        self.index_values = index_values
+        self.context = context
+        self.allow_variables = allow_variables
+
+    def parse(self, source: str) -> AffineExpression:
+        try:
+            tree = ast.parse(source.strip(), mode="eval")
+        except SyntaxError as exc:
+            raise IndexedExpressionError(
+                f"{self.context}: sintaxis invalida: {exc.msg}."
+            ) from exc
+        return self._visit(tree.body)
+
+    def _visit(self, node: ast.AST) -> AffineExpression:
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool) or not isinstance(node.value, (int, float)):
+                raise IndexedExpressionError(
+                    f"{self.context}: solo se permiten literales numericos."
+                )
+            value = float(node.value)
+            if not math.isfinite(value):
+                raise IndexedExpressionError(
+                    f"{self.context}: los valores deben ser finitos."
+                )
+            return AffineExpression(value)
+        if isinstance(node, ast.Name):
+            if node.id in self.scalar_parameters:
+                return AffineExpression(float(self.scalar_parameters[node.id]))
+            if node.id in self.index_values:
+                return AffineExpression(float(self.index_values[node.id]))
+            if self.allow_variables and node.id in self.explicit_variables:
+                return AffineExpression(0.0, {node.id: 1.0})
+            raise IndexedExpressionError(
+                f"{self.context}: simbolo desconocido '{node.id}'."
+            )
+        if isinstance(node, ast.Subscript):
+            return self._subscript(node)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = self._visit(node.operand)
+            return value if isinstance(node.op, ast.UAdd) else _scale(value, -1.0)
+        if isinstance(node, ast.BinOp):
+            left = self._visit(node.left)
+            right = self._visit(node.right)
+            if isinstance(node.op, ast.Add):
+                return _combine(left, right, 1.0)
+            if isinstance(node.op, ast.Sub):
+                return _combine(left, right, -1.0)
+            if isinstance(node.op, ast.Mult):
+                if left.is_numeric:
+                    return _scale(right, left.constant)
+                if right.is_numeric:
+                    return _scale(left, right.constant)
+                raise IndexedExpressionError(
+                    f"{self.context}: multiplicacion no lineal entre expresiones con variables."
+                )
+            if isinstance(node.op, ast.Div):
+                if not right.is_numeric:
+                    raise IndexedExpressionError(
+                        f"{self.context}: el denominador no puede depender de variables."
+                    )
+                if right.constant == 0.0:
+                    raise IndexedExpressionError(f"{self.context}: division por cero.")
+                return _scale(left, 1.0 / right.constant)
+            raise IndexedExpressionError(
+                f"{self.context}: operador no permitido '{type(node.op).__name__}'."
+            )
+        raise IndexedExpressionError(
+            f"{self.context}: construccion no permitida '{type(node).__name__}'."
+        )
+
+    def _index_nodes(self, node: ast.AST) -> tuple[ast.AST, ...]:
+        if isinstance(node, ast.Tuple):
+            return tuple(node.elts)
+        return (node,)
+
+    def _visit_index(self, node: ast.AST) -> float:
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, int)
+            and not isinstance(node.value, bool)
+        ):
+            return float(node.value)
+        if isinstance(node, ast.Name) and node.id in self.index_values:
+            return float(self.index_values[node.id])
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = self._visit_index(node.operand)
+            return value if isinstance(node.op, ast.UAdd) else -value
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+            left = self._visit_index(node.left)
+            right = self._visit_index(node.right)
+            return left + right if isinstance(node.op, ast.Add) else left - right
+        symbols = ", ".join(sorted(self.index_values))
+        raise IndexedExpressionError(
+            f"{self.context}: el indice solo admite enteros y desplazamientos de {symbols}."
+        )
+
+    def _indices(self, node: ast.AST) -> tuple[int, ...]:
+        result: list[int] = []
+        for item in self._index_nodes(node):
+            value = self._visit_index(item)
+            if isinstance(value, bool) or int(value) != value:
+                raise IndexedExpressionError(
+                    f"{self.context}: cada indice debe ser entero."
+                )
+            result.append(int(value))
+        return tuple(result)
+
+    def _subscript(self, node: ast.Subscript) -> AffineExpression:
+        if not isinstance(node.value, ast.Name):
+            raise IndexedExpressionError(
+                f"{self.context}: acceso indexado no permitido."
+            )
+        symbol = node.value.id
+        indices = self._indices(node.slice)
+        if symbol in self.indexed_parameters:
+            values = self.indexed_parameters[symbol]
+            if indices not in values:
+                rendered = ",".join(str(value) for value in indices)
+                raise IndexedExpressionError(
+                    f"{self.context} referencia {symbol}[{rendered}], fuera de su dominio."
+                )
+            return AffineExpression(float(values[indices]))
+        if symbol in self.variable_domains:
+            if not self.allow_variables:
+                rendered = ",".join(str(value) for value in indices)
+                raise IndexedExpressionError(
+                    f"{self.context}: el coeficiente no puede depender de la variable "
+                    f"{symbol}[{rendered}]."
+                )
+            set_names, domain = self.variable_domains[symbol]
+            if len(indices) != len(set_names) or indices not in domain:
+                rendered = ",".join(str(value) for value in indices)
+                raise IndexedExpressionError(
+                    f"{self.context} referencia {symbol}[{rendered}], fuera de "
+                    f"{' x '.join(set_names)}."
+                )
+            return AffineExpression(0.0, {_expanded_name(symbol, indices): 1.0})
+        raise IndexedExpressionError(
+            f"{self.context}: familia o parametro desconocido '{symbol}'."
+        )
+
+
+def parse_linear_relation_multi_index(
+    source: str,
+    *,
+    scalar_parameters: Mapping[str, float],
+    indexed_parameters: Mapping[str, Mapping[tuple[int, ...], float]],
+    variable_domains: Mapping[str, tuple[tuple[str, ...], set[tuple[int, ...]]]],
+    explicit_variables: set[str] | None = None,
+    index_values: Mapping[str, int],
+    context: str,
+) -> tuple[dict[str, float], str, float]:
+    """Analiza una relación lineal segura para dominios 1D o 2D."""
+
+    matches = list(_RELATION_PATTERN.finditer(source))
+    if len(matches) != 1:
+        raise IndexedExpressionError(
+            f"{context}: la expresion debe contener exactamente un operador <=, >= o =."
+        )
+    match = matches[0]
+    lhs_source, rhs_source = source[: match.start()], source[match.end() :]
+    if not lhs_source.strip() or not rhs_source.strip():
+        raise IndexedExpressionError(
+            f"{context}: ambos lados de la relacion son obligatorios."
+        )
+    parser = _MultiIndexAffineParser(
+        scalar_parameters=scalar_parameters,
+        indexed_parameters=indexed_parameters,
+        variable_domains=variable_domains,
+        explicit_variables=explicit_variables or set(),
+        index_values=index_values,
+        context=context,
+        allow_variables=True,
+    )
+    difference = _combine(parser.parse(lhs_source), parser.parse(rhs_source), -1.0)
+    return dict(difference.coefficients or {}), match.group(), -difference.constant
+
+
+def parse_numeric_expression_multi_index(
+    source: str,
+    *,
+    scalar_parameters: Mapping[str, float],
+    indexed_parameters: Mapping[str, Mapping[tuple[int, ...], float]],
+    index_values: Mapping[str, int],
+    context: str,
+) -> float:
+    """Evalúa de manera estática un coeficiente numérico 1D o 2D."""
+
+    parser = _MultiIndexAffineParser(
+        scalar_parameters=scalar_parameters,
+        indexed_parameters=indexed_parameters,
+        variable_domains={},
+        explicit_variables=set(),
+        index_values=index_values,
+        context=context,
+        allow_variables=False,
+    )
+    result = parser.parse(source)
+    if not result.is_numeric or not math.isfinite(result.constant):
+        raise IndexedExpressionError(
+            f"{context}: se esperaba una expresion numerica finita."
+        )
+    return result.constant

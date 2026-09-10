@@ -1,0 +1,187 @@
+EVIDENCIA REPRODUCIBLE - CONSOLA, JSON UNIFICADO 1.1 Y GRAFICOS DE PARETO
+Fecha: 2026-09-09
+Repositorio: NelsonBaza/solver-optimizador
+Rama de implementacion: feat/console-usability-unified-models
+SHA base: c7b45aff04557338cf4534189066501e219b545b
+
+1. INTEGRACION PREVIA (ETAPA A)
+
+Estado observado antes de integrar:
+- main: 08f36dd4bbb69519b214ba6a317ab105588e2a08
+- feat/academic-console-scripts: c7b45aff04557338cf4534189066501e219b545b
+- merge-base: 08f36dd4bbb69519b214ba6a317ab105588e2a08
+- relacion: rama 1 commit adelante y 0 detras de main
+- working tree: limpio
+
+Validacion anterior al fast-forward:
+  .\.venv\Scripts\python.exe -m pytest
+  254 passed, 0 failed, 1 warning conocido de .pytest_cache
+
+No habia una herramienta de Pull Request utilizable en el entorno. Se aplico
+el fast-forward autorizado y se verifico mediante reflog. main y origin/main
+quedaron en c7b45aff04557338cf4534189066501e219b545b.
+
+Validacion posterior al fast-forward:
+  .\.venv\Scripts\python.exe -m compileall -q src scripts exports tests
+  exit code 0
+
+  .\.venv\Scripts\python.exe -m pytest
+  254 passed, 0 failed, 1 warning conocido de .pytest_cache
+
+2. ESTRUCTURA FINAL DEL ESQUEMA 1.1
+
+Un unico problema.json contiene:
+- schema_version = "1.1";
+- metadata;
+- problem.type;
+- problem.variables y problem.constraints para elementos explicitos;
+- problem.sets y problem.parameters;
+- problem.variable_families 1D o 2D;
+- problem.bio_objectives con coefficients e indexed_terms;
+- problem.constraint_families 1D o 2D;
+- index_ranges opcional para acotar una expansion.
+
+El flujo observado es:
+  JSON 1.0 o 1.1
+  -> deserialize_model()
+  -> expansion 1.1 a forma explicita canonica dispersa
+  -> build_biobjective_problem_from_state()
+  -> Pyomo + HiGHS
+  -> epsilon-constraint o ponderaciones normalizadas
+
+La salida 1.1 conserva:
+- source_provenance para variables, restricciones y parametros;
+- expansion_statistics con conteos explicitos, generados y totales;
+- solo coeficientes distintos de cero.
+
+El esquema 1.0 no se migra ni cambia de significado. El modelo
+models/hidroelectrica_biobjetivo.json continuo cargando como 1.0 con 24
+variables y 28 restricciones.
+
+3. EXPANSIONES DE VALIDACION
+
+models/ejemplo_familias_1d.json:
+- estilo: 1.1 exclusivamente indexado;
+- conjunto J = 1..40;
+- variable X[j];
+- parametro escalar costo y parametro indexado capacidad[j];
+- familia Limite[j]: X[j] <= capacidad[j];
+- resultado: 40 variables generadas y 40 restricciones generadas.
+
+models/ejemplo_familias_2d.json:
+- estilo: 1.1 mixto;
+- conjuntos J = 1..3 y M = 1..2;
+- una variable explicita y X[j,m];
+- parametro escalar capacidad y parametro costo[j,m];
+- dos restricciones explicitas y Cota[j,m] sobre J x M;
+- resultado: 1 variable explicita + 6 generadas;
+- resultado: 2 restricciones explicitas + 6 generadas;
+- producto cartesiano verificado: (1,1), (1,2), (2,1), (2,2), (3,1),
+  (3,2).
+
+Se verificaron referencias j-1 validas con index_ranges y se rechazaron
+indices fuera del conjunto, parametros incompletos y expresiones no lineales.
+La inspeccion AST de los parsers confirma ausencia de llamadas a eval/exec.
+
+4. VALIDACION HIDROELECTRICA EPSILON
+
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6
+
+Matriz de pagos observada:
+- opt_Z1: (Z1,Z2) = (6701.25, 40)
+- opt_Z2: (Z1,Z2) = (21416.25, 100)
+
+Niveles observados:
+  E2 = [40, 50, 60, 70, 80, 90, 100]
+
+Frontera observada:
+  V4=40  -> Z1=6701.25
+  V4=50  -> Z1=9153.75
+  V4=60  -> Z1=11606.25
+  V4=70  -> Z1=14058.75
+  V4=80  -> Z1=16511.25
+  V4=90  -> Z1=18963.75
+  V4=100 -> Z1=21416.25
+
+Las siete soluciones son no dominadas y satisfacen:
+  Z1 = 245.25 * V4 - 3108.75
+
+PNG generado:
+  results/hidroelectrica_biobjetivo_epsilon_pareto.png
+  tamano observado: 112585 bytes
+  puntos enviados al grafico: 7
+
+5. VALIDACION HIDROELECTRICA PONDERADA
+
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method weighted --num-weights 6
+
+Resultado observado:
+- 6 corridas ponderadas;
+- 4 vectores de variables unicos;
+- extremos objetivos observados: (6701.25,40) y (21416.25,100);
+- rangos: Z1_range=14715 y Z2_range=60;
+- resultados coherentes con el backend de ponderaciones vigente.
+
+PNG generado:
+  results/hidroelectrica_biobjetivo_weighted_pareto.png
+  tamano observado: 103925 bytes
+  puntos enviados al grafico: 4
+
+Ambos PNG se abrieron para inspeccion visual. El grafico epsilon muestra los
+siete puntos, los no dominados diferenciados, linea ordenada, etiquetas E con
+desplazamientos alternados, titulo, sentidos, ejes, cuadricula y leyenda.
+
+6. PRUEBAS ESPECIFICAS
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_epsilon_constraint.py -q
+  25 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_weighted_method.py -q
+  20 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_solve_model_cli.py -q
+  11 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_academic_console_scripts.py -q
+  9 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_pareto_plot_cli.py -q
+  7 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_unified_model.py -q
+  22 passed, 0 failed
+
+7. VALIDACION COMPLETA
+
+  .\.venv\Scripts\python.exe -m compileall -q src scripts exports tests
+  exit code 0
+
+  .\.venv\Scripts\python.exe -m pytest
+  283 passed, 0 failed, 1 warning conocido de .pytest_cache
+  duracion observada: 22.66 s
+
+8. CONTROL DE CAMBIOS PROTEGIDOS
+
+La comparacion contra c7b45aff04557338cf4534189066501e219b545b no muestra
+cambios en:
+- streamlit_app.py;
+- exports/metodo_restricciones.py;
+- exports/metodo_ponderaciones.py;
+- src/solver_optimizador/epsilon_constraint.py;
+- src/solver_optimizador/multiobjective.py;
+- src/solver_optimizador/lp_solver.py.
+
+INTERPRETACION
+
+Los modelos 1.0 y 1.1 llegan al mismo builder despues de la expansion. Por lo
+tanto, el solver y los dos metodos multiobjetivo consumen una unica
+representacion matematica explicita y no necesitan conocer el estilo fuente.
+
+CONCLUSION
+
+La evidencia observada demuestra compatibilidad 1.0, composicion explicita e
+indexada en un unico JSON 1.1, expansion 1D/2D segura y dispersa, ejecucion de
+ambos metodos mediante el mismo runner y generacion headless de graficos PNG
+sin regresiones en las 283 pruebas.

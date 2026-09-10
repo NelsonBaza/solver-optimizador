@@ -12,7 +12,8 @@ from typing import Dict, Any, Optional, Tuple, List
 from .constraint_import import validate_variable_names
 
 SCHEMA_VERSION = "1.0"
-SUPPORTED_SCHEMA_VERSIONS = {"1.0"}
+RECOMMENDED_SCHEMA_VERSION = "1.1"
+SUPPORTED_SCHEMA_VERSIONS = {"1.0", "1.1"}
 
 
 def sanitize_filename(name: str) -> str:
@@ -213,6 +214,15 @@ def validate_model_dict(data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     if str(schema_ver) not in SUPPORTED_SCHEMA_VERSIONS:
         return False, f"Version de esquema no soportada: '{schema_ver}'. Versiones compatibles: {list(SUPPORTED_SCHEMA_VERSIONS)}"
 
+    if str(schema_ver) == "1.1":
+        try:
+            from .unified_model import compile_unified_model_document
+
+            compile_unified_model_document(data)
+        except ValueError as exc:
+            return False, str(exc)
+        return True, None
+
     # 2. Validar metadata (opcional pero debe ser dict si existe)
     metadata = data.get("metadata", {})
     if not isinstance(metadata, dict):
@@ -367,6 +377,11 @@ def deserialize_model(json_str: str) -> Dict[str, Any]:
         data = json.loads(json_str)
     except Exception as e:
         raise ValueError(f"JSON malformado o no valido: {e}")
+
+    if isinstance(data, dict) and str(data.get("schema_version")) == "1.1":
+        from .unified_model import compile_unified_model_document
+
+        return compile_unified_model_document(data)
 
     is_valid, err_msg = validate_model_dict(data)
     if not is_valid:

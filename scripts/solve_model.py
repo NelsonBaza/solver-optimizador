@@ -25,6 +25,7 @@ from solver_optimizador import (  # noqa: E402
     Sense,
     build_biobjective_problem_from_state,
     deserialize_model,
+    save_pareto_plot,
     solve_biobjective_epsilon_constraint,
     solve_biobjective_weighted,
 )
@@ -76,13 +77,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=6,
         help="número de ponderaciones uniformes (predeterminado: 6)",
     )
+    parser.add_argument(
+        "--no-plot",
+        action="store_true",
+        help="no generar el gráfico PNG de la frontera de Pareto",
+    )
     return parser
 
 
 def load_biobjective_model(
     model_file: Path,
 ) -> tuple[str, dict[str, Any], BiobjectiveProblem]:
-    """Carga, deserializa y construye un problema biobjetivo del esquema 1.0."""
+    """Carga y construye un problema biobjetivo de los esquemas 1.0 o 1.1."""
 
     json_text = model_file.read_text(encoding="utf-8")
     loaded = deserialize_model(json_text)
@@ -165,6 +171,21 @@ def _print_model_header(
         else "MÉTODO DE PONDERACIONES NORMALIZADAS"
     )
     print(f"\nMétodo: {method_label}")
+
+
+def _print_expansion_summary(loaded: dict[str, Any]) -> None:
+    statistics = loaded.get("expansion_statistics")
+    if not statistics:
+        print("Esquema JSON: 1.0 explícito")
+        return
+    print("Esquema JSON: 1.1 unificado")
+    print(
+        "Expansión: "
+        f"{statistics['explicit_variables']} variables explícitas + "
+        f"{statistics['generated_variables']} indexadas; "
+        f"{statistics['explicit_constraints']} restricciones explícitas + "
+        f"{statistics['generated_constraints']} generadas"
+    )
 
 
 def _print_payoff_matrix(payoff_matrix: dict[str, Any]) -> None:
@@ -325,7 +346,9 @@ def _print_weighted_unique(
         )
 
 
-def _solve_epsilon(problem: BiobjectiveProblem, primary: int, r: int) -> int:
+def _solve_epsilon(
+    problem: BiobjectiveProblem, primary: int, r: int
+) -> tuple[int, EpsilonConstraintSolution]:
     result = solve_biobjective_epsilon_constraint(
         problem,
         primary_objective=primary,
@@ -334,7 +357,7 @@ def _solve_epsilon(problem: BiobjectiveProblem, primary: int, r: int) -> int:
     if not result.payoff_matrix:
         for note in result.notes:
             print(f"ERROR: {note}", file=sys.stderr)
-        return 1
+        return 1, result
 
     _print_payoff_matrix(result.payoff_matrix)
     constrained = result.constrained_objective
@@ -351,15 +374,17 @@ def _solve_epsilon(problem: BiobjectiveProblem, primary: int, r: int) -> int:
     _print_epsilon_unique(problem, result)
     for note in result.notes:
         print(f"NOTA: {note}")
-    return 0 if result.runs else 1
+    return (0 if result.runs else 1), result
 
 
-def _solve_weighted(problem: BiobjectiveProblem, num_weights: int) -> int:
+def _solve_weighted(
+    problem: BiobjectiveProblem, num_weights: int
+) -> tuple[int, MultiobjectiveSolution]:
     result = solve_biobjective_weighted(problem, num_combinations=num_weights)
     if not result.payoff_matrix:
         for note in result.notes:
             print(f"ERROR: {note}", file=sys.stderr)
-        return 1
+        return 1, result
 
     _print_payoff_matrix(result.payoff_matrix)
     print("\nRangos de normalización")
@@ -370,21 +395,43 @@ def _solve_weighted(problem: BiobjectiveProblem, num_weights: int) -> int:
     _print_weighted_unique(problem, result)
     for note in result.notes:
         print(f"NOTA: {note}")
-    return 0 if result.weighted_runs else 1
+    return (0 if result.weighted_runs else 1), result
+
+
+def _plot_path(model_file: Path, method: str) -> Path:
+    return PROJECT_ROOT / "results" / f"{model_file.stem}_{method}_pareto.png"
 
 
 def run(args: argparse.Namespace) -> int:
     try:
-        model_name, _, problem = load_biobjective_model(args.model_file)
+        model_name, loaded, problem = load_biobjective_model(args.model_file)
     except (OSError, UnicodeError, ValueError) as exc:
         print(f"ERROR al cargar '{args.model_file}': {exc}", file=sys.stderr)
         return 2
 
     _print_model_header(args.model_file, model_name, problem, args.method)
+    _print_expansion_summary(loaded)
     try:
         if args.method == "epsilon":
-            return _solve_epsilon(problem, primary=args.primary, r=args.r)
-        return _solve_weighted(problem, num_weights=args.num_weights)
+            exit_code, result = _solve_epsilon(
+                problem, primary=args.primary, r=args.r
+            )
+        else:
+            exit_code, result = _solve_weighted(
+                problem, num_weights=args.num_weights
+            )
+        if exit_code != 0 or args.no_plot:
+            return exit_code
+        output, points = save_pareto_plot(
+            problem=problem,
+            result=result,
+            method=args.method,
+            model_name=model_name,
+            output_path=_plot_path(args.model_file, args.method),
+        )
+        print(f"\nGráfico de Pareto guardado en:\n{output}")
+        print(f"Puntos representados: {len(points)}")
+        return exit_code
     except Exception as exc:
         print(f"ERROR durante la resolución: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
