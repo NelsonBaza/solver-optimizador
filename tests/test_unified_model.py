@@ -301,7 +301,14 @@ def test_documento_de_entrada_no_se_modifica() -> None:
 
 def _run_cli(path: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(RUNNER), str(path), *arguments, "--no-plot"],
+        [
+            sys.executable,
+            str(RUNNER),
+            str(path),
+            *arguments,
+            "--no-plot",
+            "--no-excel",
+        ],
         cwd=ROOT,
         text=True,
         encoding="utf-8",

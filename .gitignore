@@ -24,6 +24,7 @@ htmlcov/
 *.nl
 *.sol
 *.log
+results/*.xlsx
 ampl.lic
 highs.lic
 

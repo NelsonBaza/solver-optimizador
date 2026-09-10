@@ -1,0 +1,190 @@
+{
+  "schema_version": "1.1",
+  "metadata": {
+    "name": "Planeación Agregada de la Producción - MetalMecánica Andina S.A.S.",
+    "plot_title": "Planeación agregada de la producción",
+    "description": "Modelo biobjetivo de seis meses: minimizar costos de producción regular y horas extra (Z1) y minimizar costos de inventario (Z2)."
+  },
+  "problem": {
+    "type": "Biobjetivo",
+    "variables": [
+      "P1",
+      "P2",
+      "P3",
+      "P4",
+      "P5",
+      "P6",
+      "E2",
+      "E4",
+      "E6",
+      "I1",
+      "I2",
+      "I3",
+      "I4",
+      "I5"
+    ],
+    "objectives": [
+      {
+        "name": "Costo de producción",
+        "sense": "Minimizar",
+        "coefficients": {
+          "P1": 48,
+          "P2": 55,
+          "P3": 60,
+          "P4": 54,
+          "P5": 47,
+          "P6": 58,
+          "E2": 70,
+          "E4": 70,
+          "E6": 70
+        }
+      },
+      {
+        "name": "Costo de inventario",
+        "sense": "Minimizar",
+        "coefficients": {
+          "I1": 5,
+          "I2": 5,
+          "I3": 5,
+          "I4": 5,
+          "I5": 5
+        }
+      }
+    ],
+    "constraints": [
+      {
+        "name": "Balance_M1",
+        "coefficients": {
+          "P1": 1,
+          "I1": -1
+        },
+        "operator": "=",
+        "rhs": 100
+      },
+      {
+        "name": "Balance_M2",
+        "coefficients": {
+          "I1": 1,
+          "P2": 1,
+          "E2": 1,
+          "I2": -1
+        },
+        "operator": "=",
+        "rhs": 135
+      },
+      {
+        "name": "Balance_M3",
+        "coefficients": {
+          "I2": 1,
+          "P3": 1,
+          "I3": -1
+        },
+        "operator": "=",
+        "rhs": 105
+      },
+      {
+        "name": "Balance_M4",
+        "coefficients": {
+          "I3": 1,
+          "P4": 1,
+          "E4": 1,
+          "I4": -1
+        },
+        "operator": "=",
+        "rhs": 125
+      },
+      {
+        "name": "Balance_M5",
+        "coefficients": {
+          "I4": 1,
+          "P5": 1,
+          "I5": -1
+        },
+        "operator": "=",
+        "rhs": 110
+      },
+      {
+        "name": "Balance_M6",
+        "coefficients": {
+          "I5": 1,
+          "P6": 1,
+          "E6": 1
+        },
+        "operator": "=",
+        "rhs": 130
+      },
+      {
+        "name": "CapRegular_M1",
+        "coefficients": {
+          "P1": 1
+        },
+        "operator": "<=",
+        "rhs": 120
+      },
+      {
+        "name": "CapRegular_M2",
+        "coefficients": {
+          "P2": 1
+        },
+        "operator": "<=",
+        "rhs": 120
+      },
+      {
+        "name": "CapRegular_M3",
+        "coefficients": {
+          "P3": 1
+        },
+        "operator": "<=",
+        "rhs": 120
+      },
+      {
+        "name": "CapRegular_M4",
+        "coefficients": {
+          "P4": 1
+        },
+        "operator": "<=",
+        "rhs": 120
+      },
+      {
+        "name": "CapRegular_M5",
+        "coefficients": {
+          "P5": 1
+        },
+        "operator": "<=",
+        "rhs": 120
+      },
+      {
+        "name": "CapRegular_M6",
+        "coefficients": {
+          "P6": 1
+        },
+        "operator": "<=",
+        "rhs": 120
+      },
+      {
+        "name": "CapExtra_M2",
+        "coefficients": {
+          "E2": 1
+        },
+        "operator": "<=",
+        "rhs": 15
+      },
+      {
+        "name": "CapExtra_M4",
+        "coefficients": {
+          "E4": 1
+        },
+        "operator": "<=",
+        "rhs": 5
+      },
+      {
+        "name": "CapExtra_M6",
+        "coefficients": {
+          "E6": 1
+        },
+        "operator": "<=",
+        "rhs": 10
+      }
+    ]
+  }
+}

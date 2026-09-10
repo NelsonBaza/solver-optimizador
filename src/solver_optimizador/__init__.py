@@ -109,6 +109,7 @@ from .pareto_plot import (
     save_multiobjective_projection_plots,
     save_pareto_plot,
 )
+from .excel_export import ExcelExportError, SHEET_NAMES, export_results_to_excel
 
 __all__ = [
     "Sense",
@@ -148,6 +149,9 @@ __all__ = [
     "prepare_pareto_plot_data",
     "save_multiobjective_projection_plots",
     "save_pareto_plot",
+    "ExcelExportError",
+    "SHEET_NAMES",
+    "export_results_to_excel",
     "build_lp_problem_from_state",
     "build_biobjective_problem_from_state",
     "build_multiobjective_problem_from_state",

@@ -1,0 +1,152 @@
+VALIDACIÓN DE EXPORTACIÓN EXCEL DE RESULTADOS
+Fecha: 2026-09-09
+Repositorio: NelsonBaza/solver-optimizador
+Rama: feat/excel-results-export
+SHA base de main: ff26875c30e6c63cc05df58c5f4eb5c6b52827e7
+
+1. Evidencia observada antes del cambio
+
+- compileall de src, scripts, exports y tests: correcto.
+- pytest: 326 passed, 0 failed; warning conocido de .pytest_cache.
+- openpyxl no estaba instalado en .venv y solo figuraba en dependencias
+  opcionales propuestas.
+- Había artefactos PNG locales ajenos y el modelo de planeación agregada no
+  versionado. Sus datos no se reconstruyeron ni modificaron.
+- SHA-256 observado del JSON de planeación agregada:
+  C9322DD1679A8716ED6009575EA8DF400DCDF3DBD5EC8A0281CDBCDDB3261C61.
+
+2. Cambios implementados
+
+- openpyxl>=3.1.5 pasó a dependencias principales y se eliminó su duplicado de
+  la lista proposed. No se agregó pandas ni xlsxwriter.
+- Se creó src/solver_optimizador/excel_export.py, separado del solver.
+- Se exportó una API export_results_to_excel y un error ExcelExportError.
+- solve_model.py genera Excel por defecto y acepta --no-excel.
+- --no-plot continúa controlando solo PNG/proyecciones.
+- Los XLSX reproducibles de results/ se ignoran en Git para evitar versionar
+  binarios derivados; esta evidencia conserva sus rutas, tamaños y resultados.
+
+El exportador recibe el problema, el objeto de resultado ya calculado y sus
+metadatos. No importa solve_lp ni ningún solver, no llama a los métodos de
+optimización y no recalcula dominancia. La hoja de restricciones evalúa lhs y
+holgura desde el mismo vector x de cada corrida. La actividad usa exactamente
+abs(holgura) < tolerance, igual que lp_solver.py.
+
+3. Estructura observada de los libros
+
+Hojas estables:
+  Resumen
+  Matriz_pagos
+  Corridas
+  Variables
+  No_dominadas
+  Restricciones
+
+Todas tienen encabezado en negrita, autofiltro, encabezado congelado, anchos
+ajustados y formato numérico. Los valores se entregan a openpyxl como números
+Python sin redondeo de presentación; number_format controla solo la vista.
+
+4. Planeación agregada MIN/MIN
+
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\planeacion_agregada_biobjetivo.json --method epsilon --primary 1 --r 6
+
+Libro:
+  results/planeacion_agregada_biobjetivo_epsilon.xlsx
+Tamaño observado: 16060 bytes.
+Corridas: 7. Variables del modelo: 14. Filas No_dominadas: 7.
+Filas Restricciones: 112 = 7 * (15 originales + 1 epsilon).
+
+Niveles E2 observados:
+  0
+  33.33333333333333
+  66.66666666666666
+  100
+  133.33333333333331
+  166.66666666666669
+  200
+
+Extremos observados:
+  E=0   -> Z1=38410, Z2=0
+  E=200 -> Z1=37740, Z2=200
+
+5. Regresión hidroeléctrica epsilon
+
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6
+
+Libro:
+  results/hidroelectrica_biobjetivo_epsilon.xlsx
+Tamaño observado: 20823 bytes.
+Corridas: 7. Variables del modelo: 24. Filas No_dominadas: 7.
+Filas Restricciones: 203 = 7 * (28 originales + 1 epsilon).
+
+E2: [40, 50, 60, 70, 80, 90, 100]
+Puntos:
+  (6701.25, 40)
+  (9153.75, 50)
+  (11606.25, 60)
+  (14058.75, 70)
+  (16511.25, 80)
+  (18963.75, 90)
+  (21416.25, 100)
+
+6. Regresión de ponderaciones
+
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method weighted --num-weights 6
+
+Libro:
+  results/hidroelectrica_biobjetivo_weighted.xlsx
+Tamaño observado: 18968 bytes.
+Corridas: 6. Soluciones únicas/no dominadas del backend: 4.
+Filas Restricciones: 168 = 6 * 28 originales.
+Corridas contiene alpha1, alpha2, Z1, Z2, N1, N2 y W. Los extremos observados
+permanecen en (6701.25, 40) y (21416.25, 100).
+
+7. Epsilon con tres objetivos
+
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\ejemplo_tres_objetivos.json --method epsilon --primary 1 --r 2 --no-plot
+
+Libro:
+  results/ejemplo_tres_objetivos_epsilon.xlsx
+Tamaño observado: 11876 bytes.
+Corridas: 9; 6 óptimas y 3 infactibles; No_dominadas: 6.
+Columnas dinámicas comprobadas: t_Z2, E_Z2, t_Z3, E_Z3, Z1, Z2 y Z3.
+Las filas infactibles se conservan con objetivos y variables vacíos.
+
+8. Pruebas observadas durante el desarrollo
+
+- test_excel_export.py: 17 passed.
+- test_excel_export.py + test_pareto_plot_cli.py: 27 passed.
+- regresiones CLI iniciales: 63 passed y 1 fallo esperado de una aserción
+  histórica que suponía que --no-plot impedía crear results/. La prueba fue
+  actualizada para exigir el nuevo comportamiento: sin PNG y con Excel.
+- La prueba compara celdas contra los objetos reales del solver y no solamente
+  contra constantes escritas manualmente.
+
+9. Interpretación y conclusión
+
+La evidencia observada confirma que la nueva capa solo presenta datos ya
+calculados. Los niveles, matriz, pesos, soluciones, Pareto y vectores x provienen
+sin modificación de EpsilonConstraintSolution, MultiobjectiveEpsilonSolution o
+MultiobjectiveSolution. Las pequeñas diferencias decimales posibles al reabrir
+un XLSX obedecen al almacenamiento numérico estándar de Excel; no se aplica
+redondeo en el exportador.
+
+No se modificaron:
+- src/solver_optimizador/lp_solver.py
+- src/solver_optimizador/epsilon_constraint.py
+- src/solver_optimizador/multiobjective_epsilon.py
+- src/solver_optimizador/multiobjective.py
+- streamlit_app.py
+- exports/metodo_restricciones.py
+- exports/metodo_ponderaciones.py
+
+10. Validación final
+
+- .\.venv\Scripts\python.exe -m compileall -q src scripts exports tests:
+  correcto.
+- .\.venv\Scripts\python.exe -m pytest:
+  343 passed, 0 failed, 1 warning conocido de .pytest_cache.

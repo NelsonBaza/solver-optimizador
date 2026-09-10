@@ -240,7 +240,14 @@ def test_loaded_model_preserves_weighted_and_epsilon_results(
 
 def _execute_runner(*arguments: str) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
-        [sys.executable, str(RUNNER_PATH), str(MODEL_PATH), *arguments],
+        [
+            sys.executable,
+            str(RUNNER_PATH),
+            str(MODEL_PATH),
+            *arguments,
+            "--no-plot",
+            "--no-excel",
+        ],
         cwd=PROJECT_ROOT,
         capture_output=True,
         check=False,

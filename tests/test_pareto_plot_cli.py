@@ -234,8 +234,11 @@ def test_no_plot_evitar_generacion(tmp_path: Path, monkeypatch, capsys) -> None:
     )
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert not (tmp_path / "results").exists()
+    results = tmp_path / "results"
+    assert not list(results.glob("*.png"))
+    assert (results / "hidroelectrica_biobjetivo_weighted.xlsx").is_file()
     assert "Gráfico de Pareto guardado" not in captured.out
+    assert "Libro Excel de resultados guardado en:" in captured.out
 
 
 def test_help_documenta_no_plot() -> None:

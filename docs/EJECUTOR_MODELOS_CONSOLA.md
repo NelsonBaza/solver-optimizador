@@ -19,7 +19,8 @@ El runner realiza explícitamente estas operaciones:
    `solve_multiobjective_epsilon_constraint()`;
 6. presenta matriz de pagos, corridas completas, variables, valores objetivo,
    soluciones únicas y clasificación Pareto;
-7. genera por defecto el PNG biobjetivo o proyecciones 2D para N objetivos.
+7. genera por defecto el PNG biobjetivo o proyecciones 2D para N objetivos;
+8. exporta los mismos resultados, sin volver a resolver, a un libro Excel.
 
 Cuando el archivo es 1.1, entre los pasos 2 y 3 se expanden conjuntos,
 parámetros, variables indexadas, términos indexados y familias de restricciones.
@@ -48,7 +49,7 @@ produce un error de uso con código 2 y nunca bloquea CI.
 ```text
 solve_model.py MODEL_FILE --method {epsilon,weighted}
                [--primary K] [--r INT] [--r-objective K=R]
-               [--num-weights INT] [--no-plot]
+               [--num-weights INT] [--no-plot] [--no-excel]
 ```
 
 - `model_file`: ruta del JSON.
@@ -62,6 +63,8 @@ solve_model.py MODEL_FILE --method {epsilon,weighted}
   `6`.
 - `--no-plot`: desactiva la creación del PNG. Sin esta opción, el archivo se
   guarda en `results/<modelo>_<metodo>_pareto.png` usando un backend headless.
+- `--no-excel`: desactiva únicamente el libro. Sin esta opción se guarda
+  `results/<modelo>_<metodo>.xlsx`. `--no-plot` no desactiva el Excel.
 
 Con `p` objetivos, epsilon ejecuta el producto de `(r_k + 1)` para los `p-1`
 objetivos restringidos. Cada combinación es una resolución real. Un objetivo
@@ -124,7 +127,28 @@ La ejecución epsilon también crea:
 
 ```text
 results/hidroelectrica_biobjetivo_epsilon_pareto.png
+results/hidroelectrica_biobjetivo_epsilon.xlsx
 ```
+
+## Libro Excel de resultados
+
+El libro se construye después del solver a partir del objeto de resultados ya
+obtenido. No vuelve a optimizar, no cambia tolerancias, niveles, pesos ni
+clasificación Pareto. Sus hojas estables son:
+
+- `Resumen`: modelo, método, objetivos, configuración, conteos y tiempos;
+- `Matriz_pagos`: anclas, estados, objetivos y variables disponibles;
+- `Corridas`: todas las corridas, incluidas las no óptimas;
+- `Variables`: una fila por corrida y una columna por variable;
+- `No_dominadas`: exactamente las soluciones que el backend ya clasificó como
+  no dominadas obtenidas;
+- `Restricciones`: evaluación de restricciones originales y epsilon desde el
+  vector `x` ya publicado, con holgura y actividad.
+
+Las celdas almacenan números, no textos redondeados. El formato visual limita
+la cantidad de decimales mostrados, pero conserva el valor numérico admitido
+por Excel. Cada hoja tiene encabezados destacados, autofiltro, fila congelada y
+anchos ajustados.
 
 ## Entrada unificada 1.1
 

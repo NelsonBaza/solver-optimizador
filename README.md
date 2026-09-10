@@ -126,7 +126,10 @@ El modo avanzado conserva comandos no interactivos reproducibles:
 ```
 
 Por defecto, cada ejecución correcta guarda el gráfico de la frontera obtenida
-en `results/<modelo>_<metodo>_pareto.png`. Use `--no-plot` para desactivarlo.
+en `results/<modelo>_<metodo>_pareto.png` y un libro estructurado en
+`results/<modelo>_<metodo>.xlsx`. Use `--no-plot` para desactivar únicamente el
+PNG o `--no-excel` para desactivar únicamente el libro. El Excel reutiliza los
+resultados ya calculados: no ejecuta corridas adicionales.
 El mismo runner acepta JSON 1.0 explícito y JSON 1.1 explícito, indexado o mixto:
 
 ```powershell

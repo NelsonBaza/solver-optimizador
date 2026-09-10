@@ -5,14 +5,15 @@
 El programa lee un problema de programación lineal con dos o más objetivos
 desde un único archivo JSON, lo valida, lo convierte a una forma explícita y
 dispersa, lo resuelve con Pyomo + HiGHS y muestra los resultados en PowerShell.
-También guarda gráficos PNG de los puntos obtenidos.
+También guarda gráficos PNG de los puntos obtenidos y un libro Excel con todos
+los resultados.
 
 ```text
 problema.json
     ↓ validación y expansión, si existen familias
 scripts/solve_model.py
     ↓ Pyomo + HiGHS
-resultados en consola + gráficos en results/
+resultados en consola + gráficos y Excel en results/
 ```
 
 Los únicos métodos multiobjetivo disponibles son:
@@ -122,6 +123,12 @@ Ponderaciones rechaza claramente los modelos con tres o más objetivos.
 .\.venv\Scripts\python.exe scripts\solve_model.py problema.json --method epsilon --primary 1 --r 6 --no-plot
 ```
 
+El libro Excel se sigue creando. Para desactivar solo el Excel:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py problema.json --method epsilon --primary 1 --r 6 --no-excel
+```
+
 ## 5. Significado de las opciones
 
 - `model_file`: ruta de `problema.json`.
@@ -134,6 +141,12 @@ Ponderaciones rechaza claramente los modelos con tres o más objetivos.
 - `--num-weights`: número de pares uniformes `(alpha1, alpha2)`. Debe ser al
   menos 2.
 - `--no-plot`: resuelve y muestra resultados, pero no crea PNG.
+- `--no-excel`: resuelve y muestra resultados, pero no crea el libro `.xlsx`.
+
+Por defecto, consola, gráfico y Excel están activos e independientes. El PNG se
+llama `results/<modelo>_<metodo>_pareto.png`; el libro se llama
+`results/<modelo>_<metodo>.xlsx`. El Excel se construye desde las corridas ya
+resueltas y no llama nuevamente al optimizador.
 
 Las opciones `--primary`, `--r` y `--r-objective` corresponden a epsilon. La
 opción `--num-weights` corresponde a ponderaciones. Si se omite `--method` en
@@ -504,7 +517,36 @@ El gráfico queda en:
 results/hidroelectrica_biobjetivo_epsilon_pareto.png
 ```
 
-## 17. Qué entregar en una evaluación
+El libro completo queda en:
+
+```text
+results/hidroelectrica_biobjetivo_epsilon.xlsx
+```
+
+## 17. Cómo leer el libro Excel
+
+El libro contiene seis hojas:
+
+1. `Resumen`: nombre, archivo, método, objetivos, configuración, conteos y
+   tiempos.
+2. `Matriz_pagos`: una fila por ancla, valores de todos los objetivos y las
+   variables disponibles.
+3. `Corridas`: todas las resoluciones realizadas. En epsilon muestra `t` y `E`;
+   con tres o más objetivos usa `t_Zk` y `E_Zk`; en ponderaciones muestra
+   `alpha1`, `alpha2`, `N1`, `N2` y `W`.
+4. `Variables`: una fila por corrida y una columna por variable. Una corrida
+   infactible conserva su fila con las variables vacías.
+5. `No_dominadas`: las soluciones que el backend ya clasificó como soluciones
+   no dominadas obtenidas por el barrido, junto con sus generadores y variables.
+6. `Restricciones`: lado izquierdo, operador, lado derecho, holgura y condición
+   activa, evaluados desde el mismo vector de variables de cada corrida óptima.
+
+Los números siguen siendo celdas numéricas. El aspecto puede mostrar menos
+decimales, pero la exportación no redondea deliberadamente los valores. Si la
+escritura del Excel falla, la consola lo informa como error de exportación; no
+lo presenta como fallo del solver ni elimina un gráfico ya creado.
+
+## 18. Qué entregar en una evaluación
 
 Para una entrega académica portable puede copiar únicamente:
 
@@ -523,7 +565,7 @@ el formato explícito compatible que ya tenían; todavía no incorporan gráfico
 ni expansión del esquema 1.1. Para modelos indexados 1D/2D y gráficos, la
 referencia es `scripts/solve_model.py` dentro del proyecto.
 
-## 18. Errores frecuentes
+## 19. Errores frecuentes
 
 - **Archivo no encontrado:** revise la ruta y la extensión `.json`.
 - **JSON inválido:** revise comas, llaves, corchetes y comillas dobles.
@@ -545,8 +587,10 @@ referencia es `scripts/solve_model.py` dentro del proyecto.
   internos son no negativos y suman 1.
 - **Rango de normalización nulo:** las dos anclas dan el mismo valor para algún
   objetivo; no se puede aplicar la normalización vigente.
+- **No se puede guardar Excel:** cierre el libro si está abierto en otra
+  aplicación y compruebe permisos de escritura en `results/`.
 
-## 19. QUIERO HACER...
+## 20. QUIERO HACER...
 
 | Quiero hacer... | Use... |
 |---|---|
@@ -564,9 +608,10 @@ referencia es `scripts/solve_model.py` dentro del proyecto.
 | Crear una regla por cada par trabajo-máquina | Use dos índices y dos conjuntos |
 | Agregar una excepción a una familia | Añada una restricción explícita al mismo JSON |
 | No generar gráfico | `--no-plot` |
+| No generar Excel | `--no-excel` |
 | Ver todas las opciones | `--help` |
 
-## 20. Glosario corto
+## 21. Glosario corto
 
 - **Conjunto:** rango de enteros usado para expandir una familia.
 - **Índice:** símbolo que toma valores de un conjunto, como `j` o `m`.

@@ -22,6 +22,7 @@ if str(SRC_DIR) not in sys.path:
 from solver_optimizador import (  # noqa: E402
     BiobjectiveProblem,
     EpsilonConstraintSolution,
+    ExcelExportError,
     MultiobjectiveEpsilonSolution,
     MultiobjectiveProblem,
     MultiobjectiveSolution,
@@ -29,6 +30,7 @@ from solver_optimizador import (  # noqa: E402
     build_biobjective_problem_from_state,
     build_multiobjective_problem_from_state,
     deserialize_model,
+    export_results_to_excel,
     save_multiobjective_projection_plots,
     save_pareto_plot,
     solve_biobjective_epsilon_constraint,
@@ -92,6 +94,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-plot",
         action="store_true",
         help="no generar el gráfico PNG ni las proyecciones de resultados",
+    )
+    parser.add_argument(
+        "--no-excel",
+        action="store_true",
+        help="no generar el libro Excel de resultados",
     )
     return parser
 
@@ -826,6 +833,10 @@ def _plot_path(model_file: Path, method: str) -> Path:
     return PROJECT_ROOT / "results" / f"{model_file.stem}_{method}_pareto.png"
 
 
+def _excel_path(model_file: Path, method: str) -> Path:
+    return PROJECT_ROOT / "results" / f"{model_file.stem}_{method}.xlsx"
+
+
 def _plot_display_name(loaded: Mapping[str, Any], model_name: str) -> str:
     metadata = loaded.get("metadata", {})
     if isinstance(metadata, Mapping):
@@ -911,36 +922,72 @@ def run(
             exit_code, result = _solve_general_epsilon(
                 problem, primary=primary, r_by_objective=r_by_objective
             )
-        if exit_code != 0 or args.no_plot:
-            return exit_code
-        if biobjective is not None:
-            output, points = save_pareto_plot(
-                problem=biobjective,
-                result=result,
-                method=method,
-                model_name=_plot_display_name(loaded, model_name),
-                output_path=_plot_path(args.model_file, method),
-            )
-            print(f"\nGráfico de Pareto guardado en:\n{output}")
-            print(f"Puntos representados: {len(points)}")
-        else:
-            projections = save_multiobjective_projection_plots(
-                problem=problem,
-                result=result,
-                model_name=_plot_display_name(loaded, model_name),
-                output_directory=PROJECT_ROOT / "results",
-                model_stem=args.model_file.stem,
-            )
-            print("\nProyecciones de soluciones multiobjetivo guardadas en:")
-            for output, points in projections:
-                print(f"  {output} ({len(points)} puntos)")
-        return exit_code
     except Exception as exc:
         print(
             f"ERROR durante la resolución: {type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
         return 1
+
+    if exit_code != 0:
+        return exit_code
+
+    artifact_error = False
+    if not args.no_plot:
+        try:
+            if biobjective is not None:
+                output, points = save_pareto_plot(
+                    problem=biobjective,
+                    result=result,
+                    method=method,
+                    model_name=_plot_display_name(loaded, model_name),
+                    output_path=_plot_path(args.model_file, method),
+                )
+                print(f"\nGráfico de Pareto guardado en:\n{output}")
+                print(f"Puntos representados: {len(points)}")
+            else:
+                projections = save_multiobjective_projection_plots(
+                    problem=problem,
+                    result=result,
+                    model_name=_plot_display_name(loaded, model_name),
+                    output_directory=PROJECT_ROOT / "results",
+                    model_stem=args.model_file.stem,
+                )
+                print("\nProyecciones de soluciones multiobjetivo guardadas en:")
+                for output, points in projections:
+                    print(f"  {output} ({len(points)} puntos)")
+        except Exception as exc:
+            artifact_error = True
+            print(
+                f"ERROR al generar el gráfico: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+
+    if not args.no_excel:
+        if biobjective is not None:
+            export_problem: BiobjectiveProblem | MultiobjectiveProblem = biobjective
+        else:
+            export_problem = problem
+        try:
+            excel_output = export_results_to_excel(
+                problem=export_problem,
+                result=result,
+                method=method,
+                model_name=model_name,
+                model_file=args.model_file,
+                output_path=_excel_path(args.model_file, method),
+            )
+            print(f"\nLibro Excel de resultados guardado en:\n{excel_output}")
+        except ExcelExportError as exc:
+            artifact_error = True
+            print(f"ERROR al exportar el libro Excel: {exc}", file=sys.stderr)
+        except Exception as exc:
+            artifact_error = True
+            print(
+                f"ERROR al exportar el libro Excel: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+    return 1 if artifact_error else exit_code
 
 
 def main(
