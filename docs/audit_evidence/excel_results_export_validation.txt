@@ -111,7 +111,9 @@ Comando:
 
 Libro:
   results/ejemplo_tres_objetivos_epsilon.xlsx
-Tamaño observado: 11876 bytes.
+Tamaño final observado: 11907 bytes. En una generación previa del mismo caso se
+observaron 11876 bytes; la diferencia corresponde a tiempos medidos y metadatos
+del contenedor ZIP, no a cambios en las nueve corridas ni en sus valores.
 Corridas: 9; 6 óptimas y 3 infactibles; No_dominadas: 6.
 Columnas dinámicas comprobadas: t_Z2, E_Z2, t_Z3, E_Z3, Z1, Z2 y Z3.
 Las filas infactibles se conservan con objetivos y variables vacíos.
