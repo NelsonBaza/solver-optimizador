@@ -178,6 +178,54 @@ class BiobjectiveProblem:
 
 
 @dataclass
+class MultiobjectiveProblem:
+    """Problema lineal con una lista ordenada de dos o más objetivos."""
+
+    variables: List[str]
+    objectives: List[LinearObjective]
+    constraints: List[LinearConstraint]
+
+    def validate(self) -> None:
+        if len(self.objectives) < 2:
+            raise ValueError("El problema multiobjetivo requiere al menos dos objetivos.")
+        if not self.variables:
+            raise ValueError("El problema debe contener al menos una variable.")
+        if not self.constraints:
+            raise ValueError("El problema debe contener al menos una restriccion.")
+        for variable in self.variables:
+            if not isinstance(variable, str) or not variable.strip():
+                raise ValueError(
+                    "Los nombres de las variables deben ser cadenas no vacias."
+                )
+        for constraint in self.constraints:
+            if not is_finite_number(constraint.rhs):
+                raise ValueError(
+                    f"El RHS de la restriccion '{constraint.name}' no es finito."
+                )
+            for variable, coefficient in constraint.coefficients.items():
+                if variable not in self.variables:
+                    raise ValueError(
+                        f"Variable '{variable}' en restriccion "
+                        f"'{constraint.name}' no declarada."
+                    )
+                if not is_finite_number(coefficient):
+                    raise ValueError(
+                        f"Coeficiente de '{variable}' en restriccion "
+                        f"'{constraint.name}' no es finito."
+                    )
+        for index, objective in enumerate(self.objectives, start=1):
+            for variable, coefficient in objective.coefficients.items():
+                if variable not in self.variables:
+                    raise ValueError(
+                        f"Variable '{variable}' en objetivo {index} no declarada."
+                    )
+                if not is_finite_number(coefficient):
+                    raise ValueError(
+                        f"Coeficiente de '{variable}' en objetivo {index} no es finito."
+                    )
+
+
+@dataclass
 class LPSolution:
     status: SolverStatus
     status_message: str

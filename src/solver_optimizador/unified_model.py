@@ -245,8 +245,10 @@ def compile_unified_model_document(document: Mapping[str, Any]) -> dict[str, Any
     if not isinstance(problem, Mapping):
         raise ValueError("El documento debe contener el objeto problem.")
     problem_type = problem.get("type")
-    if problem_type not in ("Monoobjetivo", "Biobjetivo"):
-        raise ValueError("problem.type debe ser Monoobjetivo o Biobjetivo.")
+    if problem_type not in ("Monoobjetivo", "Biobjetivo", "Multiobjetivo"):
+        raise ValueError(
+            "problem.type debe ser Monoobjetivo, Biobjetivo o Multiobjetivo."
+        )
 
     sets = _sets(problem)
     scalar_parameters, indexed_parameters, parameter_provenance = _parameters(
@@ -320,18 +322,43 @@ def compile_unified_model_document(document: Mapping[str, Any]) -> dict[str, Any
     _unique(variables, "Variables")
     all_variables = set(variables)
 
-    if problem_type == "Biobjetivo":
-        raw_objectives = problem.get("bio_objectives")
-        objective_keys = ("obj1", "obj2")
+    has_generic_objectives = "objectives" in problem
+    has_bi_objectives = "bio_objectives" in problem
+    if has_generic_objectives and has_bi_objectives:
+        raise ValueError(
+            "No defina simultáneamente 'objectives' y 'bio_objectives'."
+        )
+    if problem_type == "Monoobjetivo":
+        if has_generic_objectives:
+            raise ValueError(
+                "Monoobjetivo conserva el campo 'mono_objective'; "
+                "'objectives' se reserva para dos o más objetivos."
+            )
+        raw_objective_list = [problem.get("mono_objective")]
+    elif has_generic_objectives:
+        raw_objective_list = problem.get("objectives")
+        if not isinstance(raw_objective_list, list):
+            raise ValueError("problem.objectives debe ser una lista ordenada.")
+        expected_minimum = 3 if problem_type == "Multiobjetivo" else 2
+        if problem_type == "Biobjetivo" and len(raw_objective_list) != 2:
+            raise ValueError("Biobjetivo requiere exactamente dos objetivos.")
+        if problem_type == "Multiobjetivo" and len(raw_objective_list) < expected_minimum:
+            raise ValueError("Multiobjetivo requiere al menos tres objetivos.")
+    elif problem_type == "Biobjetivo":
+        raw_bi_objectives = problem.get("bio_objectives")
+        if not isinstance(raw_bi_objectives, Mapping):
+            raise ValueError(
+                "Biobjetivo requiere 'bio_objectives' o la lista 'objectives'."
+            )
+        raw_objective_list = [
+            raw_bi_objectives.get("obj1"),
+            raw_bi_objectives.get("obj2"),
+        ]
     else:
-        raw_objectives = {"obj": problem.get("mono_objective")}
-        objective_keys = ("obj",)
-    if not isinstance(raw_objectives, Mapping):
-        raise ValueError("Falta la definición de objetivos.")
+        raise ValueError("Multiobjetivo requiere la lista ordenada 'objectives'.")
 
     compiled_objectives: list[dict[str, Any]] = []
-    for objective_number, key in enumerate(objective_keys, start=1):
-        raw_objective = raw_objectives.get(key)
+    for objective_number, raw_objective in enumerate(raw_objective_list, start=1):
         if not isinstance(raw_objective, Mapping):
             raise ValueError(f"Falta la configuración del objetivo {objective_number}.")
         sense = raw_objective.get("sense")
@@ -389,8 +416,13 @@ def compile_unified_model_document(document: Mapping[str, Any]) -> dict[str, Any
                 coefficients[name] = coefficients.get(name, 0.0) + coefficient
                 if coefficients[name] == 0.0:
                     del coefficients[name]
+        raw_name = str(raw_objective.get("name", "")).strip()
         compiled_objectives.append(
-            {"name": f"Z{objective_number}", "sense": sense, "coefficients": coefficients}
+            {
+                "name": raw_name or f"Z{objective_number}",
+                "sense": sense,
+                "coefficients": coefficients,
+            }
         )
 
     raw_constraints = problem.get("constraints", [])
@@ -502,6 +534,7 @@ def compile_unified_model_document(document: Mapping[str, Any]) -> dict[str, Any
             "description": str(metadata.get("description", "")).strip(),
         },
         "problem_type": problem_type,
+        "objectives": compiled_objectives,
         "num_vars": len(variables),
         "var_names": variables,
         "constraints_data": constraints,
@@ -534,7 +567,7 @@ def compile_unified_model_document(document: Mapping[str, Any]) -> dict[str, Any
                 "obj2_coeffs": compiled_objectives[1]["coefficients"],
             }
         )
-    else:
+    elif problem_type == "Monoobjetivo":
         state.update(
             {
                 "obj_sense": compiled_objectives[0]["sense"],

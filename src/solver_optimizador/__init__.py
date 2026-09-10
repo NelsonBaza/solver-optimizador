@@ -10,6 +10,7 @@ from .lp_models import (
     LinearConstraint,
     LPProblem,
     BiobjectiveProblem,
+    MultiobjectiveProblem,
     SolverStatus,
     ConstraintResult,
     LPSolution,
@@ -28,6 +29,11 @@ from .epsilon_constraint import (
     generate_epsilon_levels,
     solve_biobjective_epsilon_constraint,
 )
+from .multiobjective_epsilon import (
+    MultiobjectiveEpsilonSolution,
+    classify_pareto_multiobjective,
+    solve_multiobjective_epsilon_constraint,
+)
 from .signature import build_model_signature
 from .interpretation import interpret_mono_solution, interpret_biobjective_solution
 from .model_io import (
@@ -44,6 +50,7 @@ from .unified_model import UNIFIED_SCHEMA_VERSION, compile_unified_model_documen
 from .problem_builder import (
     build_lp_problem_from_state,
     build_biobjective_problem_from_state,
+    build_multiobjective_problem_from_state,
 )
 from .constraint_import import (
     RESERVED_VARIABLE_NAMES,
@@ -95,7 +102,11 @@ from .plotting import (
     plot_constraint_slacks,
     plot_multiobjective_runs,
 )
-from .pareto_plot import prepare_pareto_plot_data, save_pareto_plot
+from .pareto_plot import (
+    prepare_pareto_plot_data,
+    save_multiobjective_projection_plots,
+    save_pareto_plot,
+)
 
 __all__ = [
     "Sense",
@@ -104,11 +115,13 @@ __all__ = [
     "LinearConstraint",
     "LPProblem",
     "BiobjectiveProblem",
+    "MultiobjectiveProblem",
     "SolverStatus",
     "ConstraintResult",
     "LPSolution",
     "MultiobjectiveSolution",
     "EpsilonConstraintSolution",
+    "MultiobjectiveEpsilonSolution",
     "is_finite_number",
     "build_model_signature",
     "interpret_mono_solution",
@@ -129,9 +142,11 @@ __all__ = [
     "plot_constraint_slacks",
     "plot_multiobjective_runs",
     "prepare_pareto_plot_data",
+    "save_multiobjective_projection_plots",
     "save_pareto_plot",
     "build_lp_problem_from_state",
     "build_biobjective_problem_from_state",
+    "build_multiobjective_problem_from_state",
     "ConstraintImportResult",
     "RESERVED_VARIABLE_NAMES",
     "ObjectiveImportResult",
@@ -174,4 +189,6 @@ __all__ = [
     "normalize_objective_value",
     "generate_epsilon_levels",
     "solve_biobjective_epsilon_constraint",
+    "solve_multiobjective_epsilon_constraint",
+    "classify_pareto_multiobjective",
 ]

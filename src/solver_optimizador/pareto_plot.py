@@ -11,7 +11,13 @@ matplotlib.use("Agg", force=True)
 import matplotlib.pyplot as plt  # noqa: E402
 
 from .epsilon_constraint import EpsilonConstraintSolution
-from .lp_models import BiobjectiveProblem, MultiobjectiveSolution, Sense
+from .lp_models import (
+    BiobjectiveProblem,
+    MultiobjectiveProblem,
+    MultiobjectiveSolution,
+    Sense,
+)
+from .multiobjective_epsilon import MultiobjectiveEpsilonSolution
 
 
 def _compact(value: float) -> str:
@@ -143,3 +149,98 @@ def save_pareto_plot(
     figure.savefig(output, format="png", dpi=160, bbox_inches="tight")
     plt.close(figure)
     return output, points
+
+
+def save_multiobjective_projection_plots(
+    problem: MultiobjectiveProblem,
+    result: MultiobjectiveEpsilonSolution,
+    model_name: str,
+    output_directory: str | Path,
+    model_stem: str,
+) -> list[tuple[Path, list[dict[str, Any]]]]:
+    """Guarda proyecciones 2D sin reinterpretar la dominancia global."""
+
+    output_dir = Path(output_directory)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    primary = result.primary_objective
+    generated: list[tuple[Path, list[dict[str, Any]]]] = []
+    for constrained in result.constrained_objectives:
+        x_label = f"Z{primary}"
+        y_label = f"Z{constrained}"
+        points = [
+            {
+                "id": solution["id"],
+                "x": float(solution["objective_values"][x_label]),
+                "y": float(solution["objective_values"][y_label]),
+                "nondominated": _is_nondominated(solution),
+            }
+            for solution in result.unique_solutions
+            if solution.get("objective_values") is not None
+        ]
+        if not points:
+            continue
+
+        figure, axis = plt.subplots(figsize=(10, 6.5))
+        dominated = [point for point in points if not point["nondominated"]]
+        nondominated = [point for point in points if point["nondominated"]]
+        if dominated:
+            axis.scatter(
+                [point["x"] for point in dominated],
+                [point["y"] for point in dominated],
+                color="#7f8c8d",
+                marker="x",
+                s=60,
+                label="Dominada globalmente",
+                zorder=3,
+            )
+        if nondominated:
+            ordered = sorted(nondominated, key=lambda point: (point["x"], point["y"]))
+            axis.scatter(
+                [point["x"] for point in ordered],
+                [point["y"] for point in ordered],
+                color="#d62728",
+                edgecolor="white",
+                linewidth=0.8,
+                s=72,
+                label="No dominada globalmente",
+                zorder=4,
+            )
+
+        offsets = ((8, 13), (8, -18), (-12, 13), (-12, -18))
+        for index, point in enumerate(points):
+            dx, dy = offsets[index % len(offsets)]
+            axis.annotate(
+                point["id"],
+                xy=(point["x"], point["y"]),
+                xytext=(dx, dy),
+                textcoords="offset points",
+                fontsize=8,
+                ha="left" if dx > 0 else "right",
+                bbox={"boxstyle": "round,pad=0.18", "fc": "white", "alpha": 0.9},
+                zorder=5,
+            )
+
+        primary_objective = problem.objectives[primary - 1]
+        constrained_objective = problem.objectives[constrained - 1]
+        axis.set_title(
+            f"Proyección de soluciones multiobjetivo — {model_name}\n"
+            f"Dominancia evaluada en {len(problem.objectives)} dimensiones"
+        )
+        axis.set_xlabel(
+            f"{x_label} — {primary_objective.name} "
+            f"({_sense_text(primary_objective.sense)})"
+        )
+        axis.set_ylabel(
+            f"{y_label} — {constrained_objective.name} "
+            f"({_sense_text(constrained_objective.sense)})"
+        )
+        axis.grid(True, linestyle="--", linewidth=0.6, alpha=0.45)
+        axis.legend(loc="best")
+        figure.tight_layout()
+        output = output_dir / (
+            f"{model_stem}_epsilon_{x_label}_vs_{y_label}.png"
+        )
+        figure.savefig(output, format="png", dpi=160, bbox_inches="tight")
+        plt.close(figure)
+        generated.append((output, points))
+    return generated

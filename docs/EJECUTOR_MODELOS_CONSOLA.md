@@ -1,4 +1,4 @@
-# Ejecutor general de modelos biobjetivo en consola
+# Ejecutor general de modelos multiobjetivo en consola
 
 `scripts/solve_model.py` carga modelos JSON compatibles con los esquemas 1.0 y
 1.1 del repositorio y ejecuta los métodos multiobjetivo disponibles sin
@@ -11,14 +11,15 @@ El runner realiza explícitamente estas operaciones:
 
 1. lee el archivo como JSON UTF-8;
 2. valida y normaliza el contenido mediante `deserialize_model()`;
-3. exige que `problem.type` sea `Biobjetivo`;
-4. construye un `BiobjectiveProblem` mediante
-   `build_biobjective_problem_from_state()`;
-5. despacha a `solve_biobjective_epsilon_constraint()` o
-   `solve_biobjective_weighted()` según `--method`;
+3. exige que el modelo tenga dos o más objetivos;
+4. normaliza los objetivos a una lista ordenada y construye un
+   `MultiobjectiveProblem` mediante
+   `build_multiobjective_problem_from_state()`;
+5. para dos objetivos conserva los motores validados; para tres o más usa
+   `solve_multiobjective_epsilon_constraint()`;
 6. presenta matriz de pagos, corridas completas, variables, valores objetivo,
    soluciones únicas y clasificación Pareto;
-7. genera por defecto un PNG del espacio de objetivos y la frontera obtenida.
+7. genera por defecto el PNG biobjetivo o proyecciones 2D para N objetivos.
 
 Cuando el archivo es 1.1, entre los pasos 2 y 3 se expanden conjuntos,
 parámetros, variables indexadas, términos indexados y familias de restricciones.
@@ -28,22 +29,42 @@ recibe el `problem_builder`; el solver no distingue el origen de cada fila.
 El modelo no está codificado dentro del script. El nombre, las variables, los
 objetivos y las restricciones proceden del archivo entregado como argumento.
 
-## Uso
+## Uso interactivo recomendado
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py problema.json
+```
+
+Sin `--method`, y únicamente si stdin es una terminal, el runner pregunta el
+método aplicable, objetivo principal, intervalos y confirmación. Reintenta las
+entradas sencillas inválidas. En stdin no interactivo, omitir `--method`
+produce un error de uso con código 2 y nunca bloquea CI.
+
+## Modo avanzado y reproducible
 
 ```text
 solve_model.py MODEL_FILE --method {epsilon,weighted}
-               [--primary {1,2}] [--r INT] [--num-weights INT] [--no-plot]
+               [--primary K] [--r INT] [--r-objective K=R]
+               [--num-weights INT] [--no-plot]
 ```
 
 - `model_file`: ruta del JSON.
 - `--method epsilon`: método de las restricciones.
-- `--primary {1,2}`: objetivo principal de ε-constraint; por defecto `1`.
-- `--r INT`: cantidad de intervalos, con `r >= 1`; por defecto `6`.
+- `--primary K`: objetivo principal de ε-constraint; por defecto `1`.
+- `--r INT`: intervalos globales para cada objetivo restringido; por defecto
+  `6`.
+- `--r-objective K=R`: sobrescritura repetible por objetivo restringido.
 - `--method weighted`: ponderaciones normalizadas existentes.
 - `--num-weights INT`: cantidad de pesos uniformes, al menos `2`; por defecto
   `6`.
 - `--no-plot`: desactiva la creación del PNG. Sin esta opción, el archivo se
   guarda en `results/<modelo>_<metodo>_pareto.png` usando un backend headless.
+
+Con `p` objetivos, epsilon ejecuta el producto de `(r_k + 1)` para los `p-1`
+objetivos restringidos. Cada combinación es una resolución real. Un objetivo
+MAX genera `Zk(x) >= E_k,t` y uno MIN genera `Zk(x) <= E_k,t`.
+Ponderaciones continúa admitiendo exactamente dos objetivos y su formulación
+normalizada no cambió.
 
 Ejemplos obligatorios desde PowerShell:
 
@@ -111,6 +132,28 @@ Un solo objeto `problem` puede incluir simultáneamente:
 - `variable_families` de una o dos dimensiones;
 - `indexed_terms` dentro de cada objetivo;
 - `constraint_families` de una o dos dimensiones.
+
+Para tres o más objetivos, el esquema 1.1 usa una lista ordenada:
+
+```json
+"type": "Multiobjetivo",
+"objectives": [
+  {"name": "Costo", "sense": "Minimizar", "coefficients": {"x": 4}},
+  {"name": "Servicio", "sense": "Maximizar", "coefficients": {"y": 1}},
+  {"name": "Uso", "sense": "Minimizar", "coefficients": {"x": 1, "y": 1}}
+]
+```
+
+El orden define Z1, Z2, ..., Zp. Para `Biobjetivo`, `objectives` también se
+acepta con exactamente dos elementos. `bio_objectives` sigue siendo compatible;
+ambos campos juntos se rechazan para evitar ambigüedad. La matriz de pagos
+general contiene `p × p` valores y sus extremos observados alimentan los
+niveles epsilon.
+
+Con tres o más objetivos se guardan proyecciones del principal contra cada
+restringido, como `results/modelo_epsilon_Z1_vs_Z2.png`. La dominancia se
+calcula en las `p` dimensiones; el gráfico no se presenta como la frontera
+completa.
 
 Las referencias explícitas a una variable expandida pueden usar `X_1_2` o la
 forma legible `X[1,2]`. Los parámetros indexados 2D escriben sus claves como

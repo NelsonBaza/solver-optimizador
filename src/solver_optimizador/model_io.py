@@ -416,12 +416,31 @@ def deserialize_model(json_str: str) -> Dict[str, Any]:
         mono = problem.get("mono_objective", {})
         res["obj_sense"] = mono.get("sense", "Maximizar")
         res["obj_coeffs"] = {v: _safe_float(mono.get("coefficients", {}).get(v, 0.0)) for v in var_names}
+        res["objectives"] = [
+            {
+                "name": str(mono.get("name", "")).strip() or "Z1",
+                "sense": res["obj_sense"],
+                "coefficients": dict(res["obj_coeffs"]),
+            }
+        ]
     else:
         bio = problem.get("bio_objectives", {})
         res["obj1_sense"] = bio.get("obj1", {}).get("sense", "Maximizar")
         res["obj1_coeffs"] = {v: _safe_float(bio.get("obj1", {}).get("coefficients", {}).get(v, 0.0)) for v in var_names}
         res["obj2_sense"] = bio.get("obj2", {}).get("sense", "Maximizar")
         res["obj2_coeffs"] = {v: _safe_float(bio.get("obj2", {}).get("coefficients", {}).get(v, 0.0)) for v in var_names}
+        res["objectives"] = [
+            {
+                "name": str(bio.get("obj1", {}).get("name", "")).strip() or "Z1",
+                "sense": res["obj1_sense"],
+                "coefficients": dict(res["obj1_coeffs"]),
+            },
+            {
+                "name": str(bio.get("obj2", {}).get("name", "")).strip() or "Z2",
+                "sense": res["obj2_sense"],
+                "coefficients": dict(res["obj2_coeffs"]),
+            },
+        ]
         mo_set = problem.get("multiobjective_settings", {})
         res["mo_mode"] = mo_set.get("mode", "Barrido automatico")
         res["num_weights"] = int(mo_set.get("num_weights", 6))

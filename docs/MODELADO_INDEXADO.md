@@ -51,12 +51,13 @@ objeto `problem`:
 |---|---|---|
 | `schema_version` | Sí | Literal `"1.1"` |
 | `metadata` | No | `name` y `description` |
-| `problem.type` | Sí | `Monoobjetivo` o `Biobjetivo` |
+| `problem.type` | Sí | `Monoobjetivo`, `Biobjetivo` o `Multiobjetivo` |
 | `problem.variables` | No | Nombres de variables explícitas |
 | `problem.sets` | No | Rangos enteros inclusivos `start..end` |
 | `problem.parameters` | No | Valores escalares o tablas 1D/2D completas |
 | `problem.variable_families` | No | Familias sobre uno o dos conjuntos |
 | `problem.bio_objectives` | Para biobjetivo | `obj1` y `obj2`, cada uno con sentido, coeficientes explícitos y/o `indexed_terms` |
+| `problem.objectives` | Para multiobjetivo | Lista ordenada de al menos tres objetivos; también admite exactamente dos en un `Biobjetivo` nuevo |
 | `problem.constraints` | No | Restricciones explícitas dispersas |
 | `problem.constraint_families` | No | Expresiones lineales sobre uno o dos índices |
 
@@ -120,9 +121,14 @@ coeficiente numérico o paramétrico:
 Z | Minimizar | GT | T | 1 | 24 | costo[t]
 ```
 
-Un rango `4..4` permite modelar un objetivo terminal como `MAX V_4`. Uno o dos
-objetivos se compilan respectivamente hacia los builders monoobjetivo o
-biobjetivo. El algoritmo de ponderaciones no fue modificado.
+Un rango `4..4` permite modelar un objetivo terminal como `MAX V_4`. Uno, dos
+o más objetivos se normalizan internamente a una lista ordenada; los builders
+monoobjetivo y biobjetivo existentes se conservan y el builder general recibe
+la lista completa. `Multiobjetivo` exige al menos tres objetivos. No se permite
+definir simultáneamente `bio_objectives` y `objectives`.
+
+El método epsilon admite dos o más objetivos. El algoritmo de ponderaciones
+permanece exclusivamente biobjetivo y no fue modificado.
 
 ## Sintaxis lineal permitida
 

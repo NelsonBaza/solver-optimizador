@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.1",
+  "metadata": {
+    "name": "Ejemplo técnico de tres objetivos",
+    "description": "Modelo pequeño MAX/MAX/MIN para validar epsilon-constraint N-dimensional."
+  },
+  "problem": {
+    "type": "Multiobjetivo",
+    "variables": ["x", "y"],
+    "objectives": [
+      {
+        "name": "Producción X",
+        "sense": "Maximizar",
+        "coefficients": {"x": 1}
+      },
+      {
+        "name": "Producción Y",
+        "sense": "Maximizar",
+        "coefficients": {"y": 1}
+      },
+      {
+        "name": "Uso total",
+        "sense": "Minimizar",
+        "coefficients": {"x": 1, "y": 1}
+      }
+    ],
+    "constraints": [
+      {
+        "name": "Capacidad_total",
+        "coefficients": {"x": 1, "y": 1},
+        "operator": "<=",
+        "rhs": 10
+      },
+      {
+        "name": "Cota_x",
+        "coefficients": {"x": 1},
+        "operator": "<=",
+        "rhs": 8
+      },
+      {
+        "name": "Cota_y",
+        "coefficients": {"y": 1},
+        "operator": "<=",
+        "rhs": 8
+      }
+    ]
+  }
+}

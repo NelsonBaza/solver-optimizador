@@ -1,0 +1,171 @@
+VALIDACIÓN: CLI INTERACTIVO + EPSILON-CONSTRAINT MULTIOBJETIVO
+Fecha: 2026-09-09
+Repositorio: NelsonBaza/solver-optimizador
+Rama: feat/interactive-multiobjective-epsilon
+SHA base: 370cd17271632ec4842ea24befa8ea0e6667ff6a
+
+1. INTEGRACIÓN PREVIA OBSERVADA
+
+- main inicial: c7b45aff04557338cf4534189066501e219b545b
+- rama integrada: feat/console-usability-unified-models
+- commit integrado: 370cd17271632ec4842ea24befa8ea0e6667ff6a
+- relación confirmada antes del fast-forward: 0 commits detrás, 1 adelante;
+  el padre de 370cd17 era c7b45af.
+- suite antes de integrar: 283 passed, 0 failed, 1 warning de .pytest_cache.
+- suite después de integrar: 283 passed, 0 failed, 1 warning de .pytest_cache.
+- push de main: exitoso.
+
+2. ESQUEMA DE OBJETIVOS ADOPTADO
+
+El esquema JSON 1.1 conserva bio_objectives y agrega la lista ordenada
+objectives. No se permiten ambos campos en el mismo documento. Biobjetivo
+admite objectives con exactamente 2 elementos. Multiobjetivo exige al menos 3.
+El orden define Z1, Z2, ..., Zp y name es descriptivo/opcional. Todo se
+normaliza internamente a una lista ordenada de objetivos lineales.
+
+El esquema JSON 1.0 no cambió y sus dos objetivos históricos también se
+exponen internamente como lista para el nuevo builder general.
+
+3. EJEMPLO DE TRES OBJETIVOS
+
+Archivo: models/ejemplo_tres_objetivos.json
+Sentidos: Z1 MAX, Z2 MAX, Z3 MIN
+Variables: x, y
+Restricciones originales: 3
+
+Matriz de pagos 3 x 3 con desempate lexicográfico determinista:
+
+             Z1        Z2        Z3
+opt_Z1     8.000     2.000    10.000
+opt_Z2     2.000     8.000    10.000
+opt_Z3     0.000     0.000     0.000
+
+Configuración reproducida:
+
+  objetivo principal: Z1
+  Z2: r2 = 4, niveles = [0, 2, 4, 6, 8]
+  Z3: r3 = 6, niveles =
+      [0, 1.66666666667, 3.33333333333, 5,
+       6.66666666667, 8.33333333333, 10]
+  combinaciones: (4 + 1) x (6 + 1) = 35
+
+Resultado observado:
+
+- 35 corridas reales enviadas al solver.
+- 21 corridas óptimas y 14 infactibles registradas sin abortar el barrido.
+- 20 soluciones únicas; una solución apareció en dos corridas.
+- 20 soluciones no dominadas obtenidas por el barrido.
+- La dominancia se evaluó en Z1, Z2 y Z3, respetando MAX/MAX/MIN.
+
+Gráficos generados:
+
+- results/ejemplo_tres_objetivos_epsilon_Z1_vs_Z2.png
+- results/ejemplo_tres_objetivos_epsilon_Z1_vs_Z3.png
+
+Ambos se titulan como proyecciones; no se presentan como frontera completa.
+La clasificación visual usa la dominancia global tridimensional.
+
+4. MODO INTERACTIVO Y NO INTERACTIVO
+
+Prueba TTY real ejecutada:
+
+  .\.venv\Scripts\python.exe scripts\solve_model.py ^
+      models\ejemplo_tres_objetivos.json --no-plot
+
+Selección ingresada: Z2 principal, r1=1, r3=1, confirmación s.
+Antes de resolver se mostró 2 x 2 = 4 corridas. El solver produjo tres
+soluciones únicas no dominadas y registró una combinación infactible.
+
+Las pruebas automatizadas verifican reintentos de método, objetivo y r,
+confirmaciones S/s/Enter, cancelación N sin invocar el solver, advertencia para
+529 corridas, Z1/Z2/Z3 como principal y selección de ponderaciones.
+
+La ejecución con stdin no TTY y sin --method terminó con código 2 y el mensaje:
+
+  ERROR: --method es obligatorio en ejecución no interactiva.
+
+El modo avanzado con --method fue probado con una función input que falla si
+es llamada: no realizó preguntas.
+
+5. REGRESIÓN HIDROELÉCTRICA
+
+Comando:
+
+  .\.venv\Scripts\python.exe scripts\solve_model.py ^
+      models\hidroelectrica_biobjetivo.json ^
+      --method epsilon --primary 1 --r 6
+
+Matriz de pagos:
+
+  opt_Z1 = (6701.25, 40)
+  opt_Z2 = (21416.25, 100)
+
+Niveles E2: [40, 50, 60, 70, 80, 90, 100]
+
+  V4=40   Z1=6701.25
+  V4=50   Z1=9153.75
+  V4=60   Z1=11606.25
+  V4=70   Z1=14058.75
+  V4=80   Z1=16511.25
+  V4=90   Z1=18963.75
+  V4=100  Z1=21416.25
+
+Las siete fueron clasificadas no dominadas. Se generó y verificó:
+
+  results/hidroelectrica_biobjetivo_epsilon_pareto.png
+
+Ponderaciones se ejecutó con 6 combinaciones y conservó los rangos:
+Z1=[6701.25,21416.25], Z2=[40,100]. Su motor no fue modificado.
+
+6. COMANDOS DE VALIDACIÓN
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_epsilon_constraint.py -q
+  Resultado: 25 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_weighted_method.py -q
+  Resultado: 20 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_solve_model_cli.py -q
+  Resultado: 11 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_academic_console_scripts.py -q
+  Resultado: 9 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_unified_model.py -q
+  Resultado: 22 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_pareto_plot_cli.py -q
+  Resultado: 7 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m pytest tests\test_multiobjective_epsilon.py ^
+      tests\test_interactive_multiobjective_cli.py -q
+  Resultado: 39 passed, 0 failed
+
+  .\.venv\Scripts\python.exe -m compileall -q src scripts exports tests
+  Resultado: exit code 0
+
+  .\.venv\Scripts\python.exe -m pytest
+  Resultado: 322 passed, 0 failed, 1 warning conocido de .pytest_cache
+
+7. ARCHIVOS PROTEGIDOS
+
+- exports/metodo_restricciones.py: sin cambios.
+- exports/metodo_ponderaciones.py: sin cambios.
+- streamlit_app.py: sin cambios.
+- src/solver_optimizador/multiobjective.py: sin cambios.
+- src/solver_optimizador/epsilon_constraint.py: sin cambios.
+- src/solver_optimizador/lp_solver.py: sin cambios.
+
+INTERPRETACIÓN
+
+El runner conserva la ruta biobjetivo existente y usa un motor general
+separado solo cuando hay tres o más objetivos. Los rangos epsilon son extremos
+observados en la matriz de pagos, no un nadir exacto. Las proyecciones 2D son
+vistas parciales del conjunto obtenido, con dominancia calculada en N
+dimensiones.
+
+CONCLUSIÓN
+
+Las observaciones demuestran que el modo normal es guiado y no bloquea CI, el
+producto cartesiano de niveles y los r individuales funcionan, la dominancia
+considera todos los objetivos y las regresiones biobjetivo permanecen intactas.

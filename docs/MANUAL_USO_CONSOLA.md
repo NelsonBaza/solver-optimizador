@@ -2,23 +2,24 @@
 
 ## 1. Qué hace el programa
 
-El programa lee un problema de programación lineal biobjetivo desde un único
-archivo JSON, lo valida, lo convierte a una forma explícita y dispersa, lo
-resuelve con Pyomo + HiGHS y muestra los resultados en PowerShell. También
-guarda un gráfico PNG de los puntos obtenidos en el espacio de objetivos.
+El programa lee un problema de programación lineal con dos o más objetivos
+desde un único archivo JSON, lo valida, lo convierte a una forma explícita y
+dispersa, lo resuelve con Pyomo + HiGHS y muestra los resultados en PowerShell.
+También guarda gráficos PNG de los puntos obtenidos.
 
 ```text
 problema.json
     ↓ validación y expansión, si existen familias
 scripts/solve_model.py
     ↓ Pyomo + HiGHS
-tablas en consola + results/..._pareto.png
+resultados en consola + gráficos en results/
 ```
 
 Los únicos métodos multiobjetivo disponibles son:
 
-1. método de las restricciones o *epsilon-constraint*;
-2. método de ponderaciones normalizadas.
+1. método de las restricciones o *epsilon-constraint*, para dos o más
+   objetivos;
+2. método de ponderaciones normalizadas, exclusivamente para dos objetivos.
 
 No hay que modificar `solve_model.py` para resolver otro ejercicio. Se cambia
 el JSON.
@@ -50,12 +51,61 @@ Consulte todas las opciones con:
 .\.venv\Scripts\python.exe scripts\solve_model.py --help
 ```
 
-## 3. Ejecuciones básicas
+## 3. Ejecución recomendada: modo interactivo
+
+La forma normal de uso es indicar solamente el JSON:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py problema.json
+```
+
+El programa muestra el nombre, tamaño y objetivos del modelo. Con dos objetivos
+pregunta si desea ponderaciones o restricciones. Con tres o más informa que el
+método disponible es restricciones. Si escoge restricciones:
+
+1. explica qué es el objetivo principal;
+2. permite escoger `Z1`, `Z2`, `Z3`, etc.;
+3. pregunta un `r` independiente para cada objetivo restringido;
+4. muestra el número total de corridas antes de resolver;
+5. solicita confirmación con `¿Desea continuar? [S/n]:`.
+
+Enter, `S` o `s` continúan. `N` o `n` cancelan sin llamar al solver. Una
+respuesta inválida vuelve a solicitarse. El **objetivo principal** es la
+función que el programa continúa optimizando directamente; las demás se
+convierten en restricciones epsilon.
+
+Ejemplo con tres objetivos: si `Z1` es principal, `r2=4` y `r3=6`, se ejecutan:
+
+```text
+(r2 + 1) × (r3 + 1) = 5 × 7 = 35 corridas
+```
+
+El programa advierte cuando la selección supera 500 corridas, pero no impone
+un límite arbitrario.
+
+## 4. Modo avanzado / ejecución reproducible
+
+Los comandos completos no hacen preguntas y son apropiados para pruebas,
+automatización o para reproducir un informe.
 
 ### Método de las restricciones
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\solve_model.py problema.json --method epsilon --primary 1 --r 6
+```
+
+En N objetivos, `--r` es el valor predeterminado para todos los restringidos.
+La opción avanzada repetible `--r-objective K=R` sobrescribe uno de ellos:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py problema3.json --method epsilon --primary 1 --r 6 --r-objective 2=4 --r-objective 3=6
+```
+
+Para elegir Z2 como principal, cambie únicamente su índice y no le asigne un
+`r` propio:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py problema3.json --method epsilon --primary 2 --r 6 --r-objective 1=4 --r-objective 3=6
 ```
 
 ### Ponderaciones normalizadas
@@ -64,56 +114,64 @@ Consulte todas las opciones con:
 .\.venv\Scripts\python.exe scripts\solve_model.py problema.json --method weighted --num-weights 6
 ```
 
+Ponderaciones rechaza claramente los modelos con tres o más objetivos.
+
 ### Sin gráfico
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\solve_model.py problema.json --method epsilon --primary 1 --r 6 --no-plot
 ```
 
-## 4. Significado de las opciones
+## 5. Significado de las opciones
 
 - `model_file`: ruta de `problema.json`.
 - `--method epsilon`: selecciona el método de las restricciones.
 - `--method weighted`: selecciona ponderaciones normalizadas.
-- `--primary 1`: usa Z1 como objetivo principal; Z2 se vuelve restricción.
-- `--primary 2`: usa Z2 como objetivo principal; Z1 se vuelve restricción.
-- `--r`: número de intervalos epsilon. Produce exactamente `r + 1` corridas.
+- `--primary K`: usa ZK como objetivo principal; debe existir en el modelo.
+- `--r`: número global de intervalos epsilon para cada objetivo restringido.
+- `--r-objective K=R`: cambia `r` solo para ZK; puede repetirse, no admite el
+  objetivo principal y exige `R >= 1`.
 - `--num-weights`: número de pares uniformes `(alpha1, alpha2)`. Debe ser al
   menos 2.
-- `--no-plot`: resuelve y muestra tablas, pero no crea el PNG.
+- `--no-plot`: resuelve y muestra resultados, pero no crea PNG.
 
-Las opciones `--primary` y `--r` corresponden a epsilon. La opción
-`--num-weights` corresponde a ponderaciones.
+Las opciones `--primary`, `--r` y `--r-objective` corresponden a epsilon. La
+opción `--num-weights` corresponde a ponderaciones. Si se omite `--method` en
+una entrada que no es una terminal interactiva, el programa termina con un
+error útil en vez de esperar indefinidamente.
 
-## 5. Cómo entender los resultados
+## 6. Cómo entender los resultados
 
 ### Objetivos y matriz de pagos
 
-- **Z1 y Z2:** las dos medidas que se quieren optimizar.
+- **Z1, Z2, ..., Zp:** las medidas que se quieren optimizar.
 - **Sentido MIN/MAX:** indica si un valor menor o mayor es preferible.
 - **Objetivo principal:** el que se optimiza directamente en epsilon.
-- **Objetivo restringido:** el que se exige mediante un nivel E.
-- **Matriz de pagos:** contiene el resultado de optimizar individualmente Z1 y
-  Z2. Sus filas permiten calcular los extremos numéricos de cada objetivo.
-- **Zk_min y Zk_max:** menor y mayor valor observado para el objetivo k en las
-  anclas de la matriz de pagos.
+- **Objetivos restringidos:** todos los no principales, exigidos mediante sus
+  niveles E.
+- **Matriz de pagos:** matriz `p × p`; cada fila se obtiene optimizando
+  individualmente un objetivo. Si hay empate, se fijan los valores alcanzados
+  y se optimizan los demás por índice, respetando sus sentidos.
+- **Zk_min y Zk_max:** menor y mayor valor observado en la columna k de la
+  matriz de pagos. Son extremos observados, no se presentan como nadir exacto.
 
 ### Método de las restricciones
 
-Los niveles se calculan exactamente como:
+Cada objetivo restringido Zk tiene su propio `r_k`. Los niveles se calculan:
 
 ```text
-E_k,t = Zk_min + (t/r)(Zk_max - Zk_min),  t = 0, ..., r
+E_k,t = Zk_min + (t/r_k)(Zk_max - Zk_min),  t = 0, ..., r_k
 ```
 
-Si el objetivo restringido es MAX, el modelo agrega `Zk(x) >= E_k,t`. Si es
-MIN, agrega `Zk(x) <= E_k,t`. Cada nivel produce una resolución completa; no
-se usan pesos ni normalización.
+Si Zk es MAX, se agrega `Zk(x) >= E_k,t`; si es MIN, se agrega
+`Zk(x) <= E_k,t`. Cada combinación cartesiana de niveles produce una
+resolución completa. El total es el producto de todos los `(r_k + 1)`. No se
+usan pesos ni normalización.
 
 ### Ponderaciones normalizadas
 
 Una **ponderación** asigna importancia mediante `alpha1` y `alpha2`, con suma
-igual a 1. Los objetivos se orientan a una escala común:
+igual a 1. Los dos objetivos se orientan a una escala común:
 
 ```text
 Objetivo MAX: Nk = (Zk - Zk_min) / (Zk_max - Zk_min)
@@ -128,37 +186,48 @@ W = alpha1*N1 + alpha2*N2
 ### Soluciones únicas, repetidas y Pareto
 
 Una **solución repetida** aparece cuando varias corridas producen el mismo
-vector de variables y los mismos objetivos dentro de tolerancia. Las corridas
-originales siguen en la tabla; solo se agrupan en el resumen.
+vector de variables y todos los objetivos dentro de tolerancia. Las corridas
+originales siguen en la salida; solo se agrupan en el resumen.
 
 Una **solución no dominada** no tiene otra solución obtenida que sea igual o
-mejor en ambos objetivos y estrictamente mejor en al menos uno, respetando los
-sentidos MIN/MAX. El conjunto de esas soluciones aproxima la **frontera de
-Pareto** obtenida por el barrido.
+mejor en todos los objetivos y estrictamente mejor en al menos uno, respetando
+cada sentido MIN/MAX. El informe las llama **soluciones no dominadas obtenidas
+por el barrido**: un barrido finito no demuestra que contenga toda la frontera
+continua.
 
-## 6. Cómo leer el gráfico
+## 7. Cómo leer los gráficos
 
-El eje horizontal es Z1 y el vertical Z2. Los puntos rojos representan
-soluciones no dominadas; los puntos dominados, si existen, se muestran con otra
-marca. La línea conecta los puntos no dominados ordenados por Z1.
+Con dos objetivos, el eje horizontal es Z1 y el vertical Z2. Los puntos rojos
+representan soluciones no dominadas; los puntos dominados, si existen, se
+muestran con otra marca. La línea conecta los puntos no dominados por Z1.
 
 Las etiquetas epsilon muestran el identificador (`S1`, `S2`, etc.) y el nivel
 E. Las etiquetas ponderadas muestran el identificador (`A`, `B`, etc.) y los
-valores de `alpha1` que generaron esa solución. Los desplazamientos de etiquetas
-son deterministas para evitar colocarlas todas sobre los puntos.
+valores de `alpha1` que generaron esa solución. Los desplazamientos son
+deterministas.
 
 No debe interpretarse que “arriba y a la derecha” siempre es mejor: si un
-objetivo es MIN, la dirección preferida para ese eje es hacia valores menores.
-El título del gráfico recuerda los sentidos.
+objetivo es MIN, la dirección preferida es hacia valores menores.
 
-## 7. Un único formato JSON
+Con tres o más objetivos no se presenta un plano como si fuera toda la
+frontera. Se crea una proyección del objetivo principal contra cada objetivo
+restringido, por ejemplo `Z1_vs_Z2` y `Z1_vs_Z3`. La condición dominada/no
+dominada se calcula usando **todos** los objetivos. Los títulos dicen
+“Proyección de soluciones multiobjetivo”. `--no-plot` desactiva todas las
+imágenes.
+
+## 8. Un único formato JSON
 
 El usuario trabaja siempre con un solo `problema.json`.
 
 - El esquema 1.0 histórico describe variables, objetivos y restricciones
   explícitos. Continúa siendo compatible sin cambios.
-- El esquema 1.1 recomendado permite usar solo elementos explícitos, solo
-  familias indexadas o una mezcla de ambos.
+- El esquema 1.1 recomendado permite usar contenido explícito, indexado o una
+  mezcla.
+- En 1.1, `problem.type = "Multiobjetivo"` exige tres o más elementos en la
+  lista ordenada `objectives`. La misma lista admite exactamente dos para
+  `Biobjetivo`. El campo histórico `bio_objectives` sigue admitido, pero no
+  puede aparecer junto con `objectives`.
 
 El flujo interno del esquema 1.1 es:
 
@@ -171,10 +240,33 @@ JSON 1.1
   → Pyomo + HiGHS
 ```
 
-El solver recibe siempre la última forma y no sabe qué filas se escribieron a
-mano.
+El solver recibe siempre la forma canónica y no sabe qué filas se escribieron
+a mano. El orden de `objectives` define Z1, Z2, ..., Zp; `name` es opcional.
 
-## 8. Problema pequeño con dos variables
+### Ejemplo técnico de tres objetivos
+
+```json
+{
+  "schema_version": "1.1",
+  "metadata": {"name": "Ejemplo técnico de tres objetivos"},
+  "problem": {
+    "type": "Multiobjetivo",
+    "variables": ["x", "y"],
+    "objectives": [
+      {"name": "Producción X", "sense": "Maximizar", "coefficients": {"x": 1}},
+      {"name": "Producción Y", "sense": "Maximizar", "coefficients": {"y": 1}},
+      {"name": "Uso total", "sense": "Minimizar", "coefficients": {"x": 1, "y": 1}}
+    ],
+    "constraints": [
+      {"name": "Total", "coefficients": {"x": 1, "y": 1}, "operator": "<=", "rhs": 10}
+    ]
+  }
+}
+```
+
+El archivo completo y verificable es `models/ejemplo_tres_objetivos.json`.
+
+## 9. Problema pequeño con dos variables
 
 Guarde este contenido como `problema.json`:
 
@@ -210,7 +302,7 @@ Guarde este contenido como `problema.json`:
 Los coeficientes son dispersos: no es necesario escribir las variables cuyo
 coeficiente es cero.
 
-## 9. Cuándo usar restricciones explícitas
+## 10. Cuándo usar restricciones explícitas
 
 Use `constraints` cuando una regla es única o excepcional. Ejemplo:
 
@@ -226,7 +318,7 @@ Use `constraints` cuando una regla es única o excepcional. Ejemplo:
 En coeficientes explícitos puede referirse a una variable indexada como
 `X[1,1]` o por su nombre expandido `X_1_1`.
 
-## 10. Conjuntos, parámetros y variables indexadas
+## 11. Conjuntos, parámetros y variables indexadas
 
 Un **conjunto** es un rango entero inclusivo:
 
@@ -276,7 +368,7 @@ Una variable 2D genera el producto cartesiano, por ejemplo `X_1_1`, `X_1_2`,
 {"name": "X", "indices": ["j", "m"], "sets": ["J", "M"]}
 ```
 
-## 11. Muchas restricciones repetitivas: ejemplo 1D
+## 12. Muchas restricciones repetitivas: ejemplo 1D
 
 Si `J=1..40`, esta única familia genera 40 restricciones:
 
@@ -305,7 +397,7 @@ Para usar una referencia anterior, limite el rango para que exista `j-1`:
 }
 ```
 
-## 12. Regla sobre dos índices
+## 13. Regla sobre dos índices
 
 Con `J=1..3` y `M=1..2`, esta familia genera seis restricciones:
 
@@ -323,7 +415,7 @@ Los nombres resultantes son `Cota_1_1`, `Cota_1_2`, `Cota_2_1`, `Cota_2_2`,
 cartesiano, no la formulación de un ejercicio real de máquinas paralelas. El
 archivo completo es `models/ejemplo_familias_2d.json`.
 
-## 13. Cómo mezclar explícito e indexado
+## 14. Cómo mezclar explícito e indexado
 
 Dentro del mismo objeto `problem` escriba ambos campos:
 
@@ -363,7 +455,7 @@ Los objetivos también pueden mezclar coeficientes explícitos e indexados:
 }
 ```
 
-## 14. Seguridad y linealidad
+## 15. Seguridad y linealidad
 
 Se permiten números finitos, parámetros, variables, suma, resta,
 multiplicación por una expresión numérica, división por constante y los
@@ -378,7 +470,7 @@ X[j] / Y[j]       división por variable
 open("archivo")   llamada a función
 ```
 
-## 15. Ejemplo hidroeléctrico
+## 16. Ejemplo hidroeléctrico
 
 El modelo histórico explícito se ejecuta así:
 
@@ -405,7 +497,7 @@ El gráfico queda en:
 results/hidroelectrica_biobjetivo_epsilon_pareto.png
 ```
 
-## 16. Qué entregar en una evaluación
+## 17. Qué entregar en una evaluación
 
 Para una entrega académica portable puede copiar únicamente:
 
@@ -424,7 +516,7 @@ el formato explícito compatible que ya tenían; todavía no incorporan gráfico
 ni expansión del esquema 1.1. Para modelos indexados 1D/2D y gráficos, la
 referencia es `scripts/solve_model.py` dentro del proyecto.
 
-## 17. Errores frecuentes
+## 18. Errores frecuentes
 
 - **Archivo no encontrado:** revise la ruta y la extensión `.json`.
 - **JSON inválido:** revise comas, llaves, corchetes y comillas dobles.
@@ -438,20 +530,27 @@ referencia es `scripts/solve_model.py` dentro del proyecto.
 - **Modelo infactible:** ninguna solución satisface todas las restricciones.
 - **Modelo no acotado:** falta una cota y el objetivo puede mejorar sin límite.
 - **r inválido:** `--r` debe ser entero y al menos 1.
+- **r por objetivo inválido:** use `K=R`, no repita ZK y no asigne r al
+  objetivo principal.
+- **Objetivo principal inválido:** el índice debe existir en la lista
+  `objectives`.
 - **Peso inválido:** `--num-weights` debe ser entero y al menos 2; los pares
   internos son no negativos y suman 1.
 - **Rango de normalización nulo:** las dos anclas dan el mismo valor para algún
   objetivo; no se puede aplicar la normalización vigente.
 
-## 18. QUIERO HACER...
+## 19. QUIERO HACER...
 
 | Quiero hacer... | Use... |
 |---|---|
-| Resolver por restricciones | `--method epsilon` |
-| Resolver por ponderaciones | `--method weighted` |
+| Resolver con ayuda paso a paso | Ejecute solo `python scripts\solve_model.py problema.json` |
+| Resolver por restricciones de forma reproducible | `--method epsilon` |
+| Resolver por ponderaciones de forma reproducible | `--method weighted` |
 | Hacer Z1 objetivo principal | `--primary 1` |
 | Hacer Z2 objetivo principal | `--primary 2` |
+| Hacer Z3 objetivo principal | `--primary 3` |
 | Obtener 11 niveles E | `--r 10` |
+| Usar cuatro intervalos solo para Z2 | `--r-objective 2=4` |
 | Obtener 8 combinaciones de pesos | `--num-weights 8` |
 | Resolver otro ejercicio | Cambie el JSON, no `solve_model.py` |
 | Escribir 40 reglas iguales | Use una familia indexada 1D |
@@ -460,7 +559,7 @@ referencia es `scripts/solve_model.py` dentro del proyecto.
 | No generar gráfico | `--no-plot` |
 | Ver todas las opciones | `--help` |
 
-## 19. Glosario corto
+## 20. Glosario corto
 
 - **Conjunto:** rango de enteros usado para expandir una familia.
 - **Índice:** símbolo que toma valores de un conjunto, como `j` o `m`.
@@ -469,6 +568,10 @@ referencia es `scripts/solve_model.py` dentro del proyecto.
 - **Representación dispersa:** almacena solo coeficientes distintos de cero.
 - **Ancla:** solución individual usada en la matriz de pagos.
 - **Epsilon:** nivel impuesto al objetivo restringido.
+- **r_k:** número de intervalos del objetivo restringido Zk; genera `r_k + 1`
+  niveles.
+- **Proyección:** gráfico de dos objetivos de un resultado evaluado en N
+  dimensiones; no representa por sí solo toda la frontera.
 - **Peso:** importancia relativa de un objetivo normalizado.
 - **Dominancia:** comparación de soluciones respetando todos los sentidos.
 - **Frontera de Pareto:** conjunto de soluciones no dominadas obtenidas.

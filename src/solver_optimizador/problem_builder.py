@@ -11,6 +11,7 @@ from .lp_models import (
     LinearConstraint,
     LPProblem,
     BiobjectiveProblem,
+    MultiobjectiveProblem,
 )
 from .model_io import normalize_constraints
 
@@ -87,3 +88,40 @@ def build_biobjective_problem_from_state(
         objective2=LinearObjective(name=obj2_name, sense=sense2_enum, coefficients=clean_coeffs2),
         constraints=constraints_list,
     )
+
+
+def build_multiobjective_problem_from_state(
+    var_names: List[str],
+    objectives: List[Dict[str, Any]],
+    canonical_constraints: List[Dict[str, Any]],
+) -> MultiobjectiveProblem:
+    """Construye un problema multiobjetivo desde el estado canónico ordenado."""
+
+    normalized_cons = normalize_constraints(canonical_constraints, var_names)
+    constraints_list = [
+        LinearConstraint(
+            name=constraint["name"],
+            coefficients=constraint["coefficients"],
+            operator=Operator.from_str(constraint["operator"]),
+            rhs=float(constraint["rhs"]),
+        )
+        for constraint in normalized_cons
+    ]
+    objective_list = [
+        LinearObjective(
+            name=str(objective.get("name") or f"Z{index}"),
+            sense=Sense.from_str(objective["sense"]),
+            coefficients={
+                variable: float(objective.get("coefficients", {}).get(variable, 0.0))
+                for variable in var_names
+            },
+        )
+        for index, objective in enumerate(objectives, start=1)
+    ]
+    problem = MultiobjectiveProblem(
+        variables=list(var_names),
+        objectives=objective_list,
+        constraints=constraints_list,
+    )
+    problem.validate()
+    return problem

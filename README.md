@@ -91,11 +91,12 @@ compatible sin cambios.
 
 ### Método de las restricciones en backend
 
-El método de $\varepsilon$-restricciones ya está disponible en el backend para
-problemas LP biobjetivo, con cualquiera de los dos objetivos como principal y
-compatibilidad MAX/MIN. Permanece deliberadamente fuera de la interfaz
-Streamlit. La demostración reproducible del Benchmark A, con ambos objetivos
-como principal y `r=5`, se ejecuta desde PowerShell con:
+El método de $\varepsilon$-restricciones está disponible en el backend para
+problemas LP con dos o más objetivos, cualquiera de ellos como principal y
+sentidos MAX/MIN independientes. El barrido usa el producto cartesiano de los
+niveles de todos los objetivos restringidos. Permanece deliberadamente fuera
+de Streamlit. La API biobjetivo original y su demostración del Benchmark A se
+conservan:
 
 ```powershell
 & ".\.venv\Scripts\python.exe" scripts\demo_metodo_restricciones.py
@@ -106,8 +107,15 @@ Consulte la formulación y la estructura completa del resultado en
 
 ### Ejecutor general de modelos en consola
 
-Los modelos biobjetivo guardados con el esquema JSON 1.0 pueden resolverse sin
-la interfaz gráfica mediante `scripts/solve_model.py`:
+Los modelos con dos o más objetivos pueden resolverse sin la interfaz gráfica
+mediante `scripts/solve_model.py`. En una terminal, el uso recomendado es
+interactivo:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py problema.json
+```
+
+El modo avanzado conserva comandos no interactivos reproducibles:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6
@@ -124,6 +132,12 @@ El mismo runner acepta JSON 1.0 explícito y JSON 1.1 explícito, indexado o mix
 ```powershell
 .\.venv\Scripts\python.exe scripts\solve_model.py models\ejemplo_familias_2d.json --method weighted --num-weights 6
 ```
+
+El esquema 1.1 también admite `problem.type="Multiobjetivo"` con una lista
+ordenada `objectives` de tres o más elementos. En ese caso epsilon permite un
+`r_k` distinto mediante `--r-objective K=R` y genera proyecciones 2D del
+objetivo principal contra cada objetivo restringido. Ponderaciones continúa
+siendo exclusivamente biobjetivo.
 
 El modelo hidroeléctrico biobjetivo corregido está versionado en formato
 disperso dentro de `models/`. Consulte
@@ -157,6 +171,7 @@ solver-optimizador/
 │       ├── lp_solver.py          # Motor LP monoobjetivo (Pyomo + APPSI HiGHS)
 │       ├── multiobjective.py     # Motor multiobjetivo (matriz de pagos, pesos, Pareto)
 │       ├── epsilon_constraint.py # Método de restricciones para LP biobjetivo
+│       ├── multiobjective_epsilon.py # Epsilon-constraint para N objetivos
 │       ├── unified_model.py      # Compilador JSON 1.1 explícito/indexado 1D-2D
 │       ├── pareto_plot.py        # Gráficos PNG headless de frontera de Pareto
 │       ├── constraint_import.py  # Parseo tabular ancho/disperso y XLSX solver-agnostic
@@ -182,7 +197,8 @@ solver-optimizador/
 ├── models/
 │   ├── hidroelectrica_biobjetivo.json # Modelo biobjetivo disperso de 4 períodos
 │   ├── ejemplo_familias_1d.json       # Ejemplo 1.1 con 40 filas generadas
-│   └── ejemplo_familias_2d.json       # Ejemplo 1.1 mixto sobre J × M
+│   ├── ejemplo_familias_2d.json       # Ejemplo 1.1 mixto sobre J × M
+│   └── ejemplo_tres_objetivos.json    # Ejemplo técnico MAX/MAX/MIN
 ├── verify_ampl_highs.py          # Verificacion base de AMPL
 │
 ├── requirements-pyomo.txt        # Dependencias de Pyomo + HiGHS

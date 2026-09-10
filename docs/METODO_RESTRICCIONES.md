@@ -1,7 +1,8 @@
 # Método de las restricciones (ε-constraint)
 
-**Estado:** implementación de backend validada para programación lineal
-biobjetivo. No está integrada en Streamlit.
+**Estado:** implementación de backend validada para programación lineal con
+dos o más objetivos. La API biobjetivo descrita en las secciones 1 a 7 se
+conserva sin cambios. No está integrada en Streamlit.
 
 ## 1. Definición
 
@@ -161,3 +162,52 @@ En cada barrido muestra objetivos, sentidos, óptimos individuales, matriz de
 pagos, extremos, fórmula, tabla de las 6 corridas, soluciones únicas y frontera
 no dominada obtenida. Los decimales mostrados son formato de presentación; los
 valores internos no se redondean.
+
+## 8. Generalización para N objetivos
+
+`MultiobjectiveProblem` contiene una lista ordenada `objectives`. Si Zq es el
+objetivo principal, cada Zk con `k != q` se convierte en restricción y conserva
+su propio `r_k`:
+
+```text
+E_k,t = Zk_min + (t/r_k)(Zk_max - Zk_min),  t = 0, ..., r_k
+
+Zk(x) >= E_k,t    si Zk es MAX
+Zk(x) <= E_k,t    si Zk es MIN
+```
+
+El motor resuelve el producto cartesiano exacto de los niveles. El total es:
+
+```text
+producto de (r_k + 1), para todo k distinto de q
+```
+
+La matriz de pagos tiene `p × p` valores. Cada fila parte del óptimo real del
+objetivo correspondiente y desempata lexicográficamente con los demás
+objetivos, en orden de índice y respetando sus sentidos, mientras mantiene
+fijos los valores alcanzados. Los mínimos y máximos de columna se denominan
+**extremos observados en la matriz de pagos**; no se afirman como nadir exacto.
+
+La API general es:
+
+```python
+from solver_optimizador import solve_multiobjective_epsilon_constraint
+
+solution = solve_multiobjective_epsilon_constraint(
+    problem,
+    primary_objective=1,
+    r_by_objective={2: 4, 3: 6},
+    tol=1e-6,
+)
+```
+
+Cada corrida registra `epsilon_indices`, `epsilon_levels`, el estado, el vector
+completo `x`, todos los valores objetivo reconstruidos desde ese vector y el
+tiempo. Los duplicados comparan todas las variables y todos los objetivos. La
+dominancia también se evalúa en todas las dimensiones. Por precisión, el
+resultado se denomina “soluciones no dominadas obtenidas por el barrido
+epsilon”.
+
+La API pública `solve_biobjective_epsilon_constraint()` no fue reemplazada ni
+alterada. El método de ponderaciones continúa siendo exclusivamente
+biobjetivo.
