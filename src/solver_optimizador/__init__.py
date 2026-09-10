@@ -110,6 +110,10 @@ from .pareto_plot import (
     save_pareto_plot,
 )
 from .excel_export import ExcelExportError, SHEET_NAMES, export_results_to_excel
+from .gurobi_script_export import (
+    GurobiScriptExportError,
+    export_gurobi_script,
+)
 
 __all__ = [
     "Sense",
@@ -152,6 +156,8 @@ __all__ = [
     "ExcelExportError",
     "SHEET_NAMES",
     "export_results_to_excel",
+    "GurobiScriptExportError",
+    "export_gurobi_script",
     "build_lp_problem_from_state",
     "build_biobjective_problem_from_state",
     "build_multiobjective_problem_from_state",

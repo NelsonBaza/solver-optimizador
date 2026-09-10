@@ -128,7 +128,30 @@ La ejecución epsilon también crea:
 ```text
 results/hidroelectrica_biobjetivo_epsilon_pareto.png
 results/hidroelectrica_biobjetivo_epsilon.xlsx
+results/hidroelectrica_biobjetivo_epsilon_gurobi.py
 ```
+
+## Script Gurobi autónomo
+
+El archivo `results/<modelo>_<metodo>_gurobi.py` incorpora variables continuas,
+restricciones, objetivos, sentidos y configuración del método. No importa
+`solver_optimizador` ni lee el JSON original, por lo que puede copiarse fuera
+del repositorio. Generarlo no requiere Gurobi: el generador escribe texto y no
+importa `gurobipy`.
+
+Al ejecutarlo sí se requieren `gurobipy`, una licencia Gurobi disponible por su
+mecanismo normal y `matplotlib`:
+
+```powershell
+py -3.12 results\planeacion_agregada_biobjetivo_epsilon_gurobi.py
+```
+
+El runner resuelve primero mediante Pyomo/HiGHS. El script autónomo reconstruye
+y resuelve posteriormente el mismo problema con Gurobi; no copia la matriz de
+pagos ni las soluciones de HiGHS. Reproduce el desempate lexicográfico, los
+niveles epsilon, el producto cartesiano N-dimensional y las ponderaciones
+normalizadas vigentes. También guarda gráficos junto al propio script. Use
+`--no-gurobi-script` para omitir solo esta salida.
 
 ## Libro Excel de resultados
 

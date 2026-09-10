@@ -126,10 +126,24 @@ El modo avanzado conserva comandos no interactivos reproducibles:
 ```
 
 Por defecto, cada ejecución correcta guarda el gráfico de la frontera obtenida
-en `results/<modelo>_<metodo>_pareto.png` y un libro estructurado en
-`results/<modelo>_<metodo>.xlsx`. Use `--no-plot` para desactivar únicamente el
-PNG o `--no-excel` para desactivar únicamente el libro. El Excel reutiliza los
-resultados ya calculados: no ejecuta corridas adicionales.
+en `results/<modelo>_<metodo>_pareto.png`, un libro estructurado en
+`results/<modelo>_<metodo>.xlsx` y un script autónomo en
+`results/<modelo>_<metodo>_gurobi.py`. Use `--no-plot`, `--no-excel` o
+`--no-gurobi-script` para desactivar únicamente la salida correspondiente. El
+Excel reutiliza resultados ya calculados y el generador Gurobi solo traduce el
+problema y la configuración: ninguno ejecuta corridas Pyomo adicionales.
+
+Generar el archivo no requiere Gurobi. Para ejecutarlo posteriormente se
+requieren `gurobipy`, una licencia Gurobi válida y `matplotlib`; el archivo no
+importa este repositorio ni vuelve a leer el JSON original. Ejemplo en Windows:
+
+```powershell
+py -3.12 results\planeacion_agregada_biobjetivo_epsilon_gurobi.py
+```
+
+El runner principal sigue resolviendo con Pyomo/HiGHS. El archivo generado
+reconstruye el mismo LP continuo y lo resuelve de nuevo con Gurobi, incluida la
+matriz de pagos y todas las corridas epsilon o ponderadas.
 El mismo runner acepta JSON 1.0 explícito y JSON 1.1 explícito, indexado o mixto:
 
 ```powershell
@@ -177,6 +191,7 @@ solver-optimizador/
 │       ├── multiobjective_epsilon.py # Epsilon-constraint para N objetivos
 │       ├── unified_model.py      # Compilador JSON 1.1 explícito/indexado 1D-2D
 │       ├── pareto_plot.py        # Gráficos PNG headless de frontera de Pareto
+│       ├── gurobi_script_export.py # Generador de scripts Gurobi autónomos
 │       ├── constraint_import.py  # Parseo tabular ancho/disperso y XLSX solver-agnostic
 │       ├── input_application.py  # Aplicacion atomica de lotes a estado
 │       ├── indexed_model.py      # Especificacion indexada serializable

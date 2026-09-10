@@ -129,6 +129,13 @@ El libro Excel se sigue creando. Para desactivar solo el Excel:
 .\.venv\Scripts\python.exe scripts\solve_model.py problema.json --method epsilon --primary 1 --r 6 --no-excel
 ```
 
+El script Gurobi también se genera por defecto. Para omitir únicamente esa
+salida:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\solve_model.py problema.json --method epsilon --primary 1 --r 6 --no-gurobi-script
+```
+
 ## 5. Significado de las opciones
 
 - `model_file`: ruta de `problema.json`.
@@ -142,11 +149,14 @@ El libro Excel se sigue creando. Para desactivar solo el Excel:
   menos 2.
 - `--no-plot`: resuelve y muestra resultados, pero no crea PNG.
 - `--no-excel`: resuelve y muestra resultados, pero no crea el libro `.xlsx`.
+- `--no-gurobi-script`: resuelve normalmente, pero no crea el `.py` autónomo.
 
-Por defecto, consola, gráfico y Excel están activos e independientes. El PNG se
-llama `results/<modelo>_<metodo>_pareto.png`; el libro se llama
-`results/<modelo>_<metodo>.xlsx`. El Excel se construye desde las corridas ya
-resueltas y no llama nuevamente al optimizador.
+Por defecto, consola, gráfico, Excel y script Gurobi están activos e
+independientes. El PNG se llama `results/<modelo>_<metodo>_pareto.png`; el libro
+se llama `results/<modelo>_<metodo>.xlsx`; y el script se llama
+`results/<modelo>_<metodo>_gurobi.py`. El Excel se construye desde las corridas
+ya resueltas. El generador Gurobi usa el problema y la configuración ya
+disponibles, sin llamar nuevamente al optimizador Pyomo.
 
 Las opciones `--primary`, `--r` y `--r-objective` corresponden a epsilon. La
 opción `--num-weights` corresponde a ponderaciones. Si se omite `--method` en
@@ -546,6 +556,24 @@ decimales, pero la exportación no redondea deliberadamente los valores. Si la
 escritura del Excel falla, la consola lo informa como error de exportación; no
 lo presenta como fallo del solver ni elimina un gráfico ya creado.
 
+## 17.1 Cómo usar el script Gurobi generado
+
+El archivo `*_gurobi.py` es una traducción autónoma del modelo continuo y de
+la configuración seleccionada. Contiene los coeficientes necesarios y no lee el
+JSON ni importa el proyecto. Generarlo no requiere Gurobi; ejecutarlo requiere
+`gurobipy`, `matplotlib` y una licencia que Gurobi pueda localizar normalmente.
+
+```powershell
+py -3.12 results\planeacion_agregada_biobjetivo_epsilon_gurobi.py
+```
+
+Esta ejecución vuelve a resolver realmente con Gurobi: calcula sus propias
+anclas, matriz de pagos, niveles o pesos, corridas y soluciones no dominadas.
+Para dos objetivos guarda `*_gurobi_pareto.png`. Para más objetivos guarda
+proyecciones del objetivo principal; si existen exactamente dos variables y la
+región es representable y acotada, también guarda
+`*_gurobi_region_factible.png`.
+
 ## 18. Qué entregar en una evaluación
 
 Para una entrega académica portable puede copiar únicamente:
@@ -589,6 +617,8 @@ referencia es `scripts/solve_model.py` dentro del proyecto.
   objetivo; no se puede aplicar la normalización vigente.
 - **No se puede guardar Excel:** cierre el libro si está abierto en otra
   aplicación y compruebe permisos de escritura en `results/`.
+- **Gurobi no ejecuta el script:** compruebe `gurobipy` y la licencia mediante
+  las herramientas oficiales. La generación del archivo no necesita Gurobi.
 
 ## 20. QUIERO HACER...
 
@@ -609,6 +639,7 @@ referencia es `scripts/solve_model.py` dentro del proyecto.
 | Agregar una excepción a una familia | Añada una restricción explícita al mismo JSON |
 | No generar gráfico | `--no-plot` |
 | No generar Excel | `--no-excel` |
+| No generar el script Gurobi | `--no-gurobi-script` |
 | Ver todas las opciones | `--help` |
 
 ## 21. Glosario corto

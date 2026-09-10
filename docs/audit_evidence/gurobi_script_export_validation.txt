@@ -1,0 +1,139 @@
+VALIDACION DE EXPORTACION DE SCRIPTS GUROBI AUTONOMOS
+Fecha: 2026-09-10
+
+Repositorio y alcance
+--------------------
+Rama: feat/gurobi-script-export
+SHA base: 190686cf70a250336719866380e06e9294588a1c
+Working tree base: limpio
+Solvers matematicos existentes modificados: ninguno
+
+Archivos de produccion y documentacion creados/modificados
+---------------------------------------------------------
+Creado:
+- src/solver_optimizador/gurobi_script_export.py
+- tests/test_gurobi_script_export.py
+- docs/audit_evidence/gurobi_script_export_validation.txt
+
+Modificados:
+- .gitignore
+- README.md
+- docs/EJECUTOR_MODELOS_CONSOLA.md
+- docs/MANUAL_USO_CONSOLA.md
+- scripts/solve_model.py
+- src/solver_optimizador/__init__.py
+
+No se modificaron:
+- src/solver_optimizador/lp_solver.py
+- src/solver_optimizador/epsilon_constraint.py
+- src/solver_optimizador/multiobjective_epsilon.py
+- src/solver_optimizador/multiobjective.py
+
+Entorno Gurobi detectado
+------------------------
+gurobi_cl: C:\gurobi1302\win64\bin\gurobi_cl.exe
+Version Gurobi: 13.0.2
+Version gurobipy usada para validacion real: 13.0.2
+Python usado para validacion real: 3.14.2
+Interprete: D:\AI\solver-optimizador\.venv\Scripts\python.exe
+Python 3.12: no estaba instalado; py -0p mostro solamente Python 3.14.
+Licencia: instalacion academica detectada mediante el mecanismo normal de
+Gurobi. No se modifico ni se incorporo informacion de licencia al codigo.
+
+Aislamiento de dependencias
+---------------------------
+- gurobipy no se agrego a pyproject.toml.
+- El generador no importa ni ejecuta gurobipy.
+- Los scripts generados no importan solver_optimizador ni leen el JSON fuente.
+- Tras la validacion real se desinstalo gurobipy del .venv.
+- importlib.util.find_spec("gurobipy") devolvio None.
+- Con gurobipy ausente, los 18 tests del generador pasaron.
+
+Validacion Pyomo/HiGHS frente a Gurobi
+--------------------------------------
+Comparacion programatica con floats completos y tolerancia, sin comparar texto
+redondeado:
+
+Planeacion agregada, epsilon, primary=1, r=6
+- Matriz de pagos Gurobi:
+  opt_Z1: Z1=37740, Z2=199.99999999999977
+  opt_Z2: Z1=38410, Z2=0
+- Corridas: 7; no dominadas: 7.
+- Niveles Z2: 0, 33.3333333333333, 66.6666666666667, 100,
+  133.333333333333, 166.666666666667, 200.
+- Z1: 38410, 38256.6666666667, 38106.6666666667, 37960,
+  37833.3333333333, 37776.6666666667, 37740.
+- Diferencia maxima de matriz: 2.2737367544323206e-13.
+- Diferencia maxima de epsilon: 2.2737367544323206e-13.
+- Diferencia maxima de objetivos por corrida: 1.9895196601282805e-13.
+- Diferencia maxima de variables por corrida: 4.263256414560601e-14.
+
+Hidroelectrica, epsilon, primary=1, r=6
+- Corridas: 7; no dominadas: 7.
+- Objetivos Gurobi: (6701.25, 40), (9153.75, 50), (11606.25, 60),
+  (14058.75, 70), (16511.25, 80), (18963.75, 90), (21416.25, 100).
+- Diferencia maxima de matriz: 1.8189894035458565e-12.
+- Diferencia maxima de objetivos por corrida: 3.637978807091713e-12.
+
+Hidroelectrica, ponderaciones normalizadas, num_weights=6
+- Corridas: 6; soluciones unicas/no dominadas registradas: 4.
+- Se compararon corrida por corrida alpha1, alpha2, Z1, Z2, N1, N2 y W.
+- Diferencia maxima de matriz: 1.8189894035458565e-12.
+- Diferencia maxima en campos comparados: 3.637978807091713e-12.
+- Las diferencias de variables observadas corresponden a soluciones
+  degeneradas con los mismos valores objetivo.
+
+Tres objetivos, epsilon, primary=1, r=2
+- Producto cartesiano: (2+1)*(2+1)=9 corridas.
+- Estados HiGHS y Gurobi coincidentes:
+  optimal, optimal, optimal, infeasible, optimal, optimal, infeasible,
+  infeasible, optimal.
+- Soluciones unicas/no dominadas: 6.
+- Diferencia maxima de objetivos factibles: 0.
+- Las corridas infactibles no contienen valores x ni Z inventados.
+
+Scripts generados y ejecutados realmente con Gurobi
+---------------------------------------------------
+- results/planeacion_agregada_biobjetivo_epsilon_gurobi.py
+- results/hidroelectrica_biobjetivo_epsilon_gurobi.py
+- results/hidroelectrica_biobjetivo_weighted_gurobi.py
+- results/ejemplo_tres_objetivos_epsilon_gurobi.py
+
+Graficos Gurobi generados y revisados visualmente
+-------------------------------------------------
+- results/planeacion_agregada_biobjetivo_epsilon_gurobi_pareto.png
+- results/hidroelectrica_biobjetivo_epsilon_gurobi_pareto.png
+- results/hidroelectrica_biobjetivo_weighted_gurobi_pareto.png
+- results/ejemplo_tres_objetivos_epsilon_gurobi_Z1_vs_Z2.png
+- results/ejemplo_tres_objetivos_epsilon_gurobi_Z1_vs_Z3.png
+- results/ejemplo_tres_objetivos_epsilon_gurobi_region_factible.png
+
+Los modelos con mas de dos variables informan que la region factible completa
+no puede representarse directamente en 2D. El ejemplo de dos variables genera
+la region factible a partir de sus restricciones originales.
+
+Pruebas automatizadas
+---------------------
+Comando:
+.\.venv\Scripts\python.exe -m compileall -q src scripts exports tests
+Resultado: exit code 0, sin salida.
+
+Comando:
+.\.venv\Scripts\python.exe -m pytest
+Resultado: 361 collected; 361 passed; 0 failed; 0 skipped; 1 warning;
+duracion 43.12 s.
+
+Pruebas del generador sin Gurobi:
+18 passed; 0 failed; 0 skipped; 1 warning.
+
+Warning observado
+-----------------
+PytestCacheWarning: pytest no pudo crear .pytest_cache/v/cache/nodeids por
+WinError 183. No afecta la ejecucion ni los resultados de las pruebas.
+
+Conclusion
+----------
+Los scripts reconstruyen el LP continuo y vuelven a resolver realmente con
+Gurobi. No incorporan soluciones, matrices de pago ni puntos Pareto calculados
+por HiGHS. La formulacion epsilon, el producto cartesiano, la normalizacion y
+las ponderaciones reproducen el procedimiento academico actual.

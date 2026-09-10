@@ -23,6 +23,7 @@ from solver_optimizador import (  # noqa: E402
     BiobjectiveProblem,
     EpsilonConstraintSolution,
     ExcelExportError,
+    GurobiScriptExportError,
     MultiobjectiveEpsilonSolution,
     MultiobjectiveProblem,
     MultiobjectiveSolution,
@@ -31,6 +32,7 @@ from solver_optimizador import (  # noqa: E402
     build_multiobjective_problem_from_state,
     deserialize_model,
     export_results_to_excel,
+    export_gurobi_script,
     save_multiobjective_projection_plots,
     save_pareto_plot,
     solve_biobjective_epsilon_constraint,
@@ -99,6 +101,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-excel",
         action="store_true",
         help="no generar el libro Excel de resultados",
+    )
+    parser.add_argument(
+        "--no-gurobi-script",
+        action="store_true",
+        help="no generar el script Python autónomo para Gurobi",
     )
     return parser
 
@@ -837,6 +844,10 @@ def _excel_path(model_file: Path, method: str) -> Path:
     return PROJECT_ROOT / "results" / f"{model_file.stem}_{method}.xlsx"
 
 
+def _gurobi_script_path(model_file: Path, method: str) -> Path:
+    return PROJECT_ROOT / "results" / f"{model_file.stem}_{method}_gurobi.py"
+
+
 def _plot_display_name(loaded: Mapping[str, Any], model_name: str) -> str:
     metadata = loaded.get("metadata", {})
     if isinstance(metadata, Mapping):
@@ -985,6 +996,31 @@ def run(
             artifact_error = True
             print(
                 f"ERROR al exportar el libro Excel: {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+
+    if not args.no_gurobi_script:
+        export_problem = biobjective if biobjective is not None else problem
+        try:
+            gurobi_output = export_gurobi_script(
+                problem=export_problem,
+                method=method,
+                model_name=model_name,
+                model_file=args.model_file,
+                output_path=_gurobi_script_path(args.model_file, method),
+                primary_objective=primary if method == "epsilon" else None,
+                r_by_objective=r_by_objective if method == "epsilon" else None,
+                num_weights=num_weights if method == "weighted" else None,
+            )
+            print(f"\nScript Gurobi autónomo guardado en:\n{gurobi_output}")
+        except GurobiScriptExportError as exc:
+            artifact_error = True
+            print(f"ERROR al exportar el script Gurobi: {exc}", file=sys.stderr)
+        except Exception as exc:
+            artifact_error = True
+            print(
+                f"ERROR al exportar el script Gurobi: "
+                f"{type(exc).__name__}: {exc}",
                 file=sys.stderr,
             )
     return 1 if artifact_error else exit_code

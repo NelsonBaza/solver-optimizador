@@ -25,6 +25,8 @@ htmlcov/
 *.sol
 *.log
 results/*.xlsx
+results/*_gurobi.py
+results/*_gurobi_*.png
 ampl.lic
 highs.lic
 
