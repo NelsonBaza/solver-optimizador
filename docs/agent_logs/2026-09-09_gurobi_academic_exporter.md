@@ -26,7 +26,8 @@ solo los datos ya validados y la implementación académica necesaria.
 - Un modelo Gurobi nuevo por corrida para impedir acumulación de restricciones.
 - Dos optimizaciones por ancla: objetivo de la fila y desempate con el otro
   objetivo manteniendo exactamente el óptimo primario.
-- Datos canónicos dispersos embebidos como literales Python.
+- Sentencias Gurobi directas generadas desde los datos canónicos, sin un parser
+  de restricciones dentro del entregable.
 - Configuración visible (`PRIMARY_OBJECTIVE`, `R`, `SHOW_GUROBI_LOG`).
 - Matplotlib en backend `Agg` y salida PNG junto al archivo.
 - Ningún `setObjectiveN`, peso, normalización ni dependencia Gurobi del proyecto.
@@ -50,8 +51,9 @@ backend oficial Pyomo + HiGHS sobre la misma representación canónica.
 ## Resultado verificable
 
 - Archivo: `entregas/hidroelectrica_restricciones_gurobi.py`.
-- Tamaño: 20230 bytes.
-- Líneas: 518.
+- SHA previo a la corrección de compacidad: `ae85c0d8422f143ba81151d00c3ba10f49eb377e`.
+- Tamaño antes/después: 20230 / 11081 bytes.
+- Líneas antes/después: 518 / 278.
 - Variables/restricciones: 24/28.
 - Configuración: Z1 principal, Z2 restringido, `R=6`.
 - Matriz esperada desde el backend oficial: `(6701.25,40)` y
@@ -60,7 +62,28 @@ backend oficial Pyomo + HiGHS sobre la misma representación canónica.
 - Siete puntos esperados: los aprobados de la regresión hidroeléctrica.
 - AST, `compile`, `py_compile`, portabilidad estructural y reproducibilidad del
   archivo versionado: correctos.
-- Suite completa: 346 passed, 0 failed, 1 skipped por ausencia de Gurobi.
+- Suite completa: 347 passed, 0 failed, 1 skipped por ausencia de Gurobi.
+
+## Corrección de compacidad académica
+
+La primera versión era correcta, pero las listas `VARIABLES`, `OBJECTIVES` y
+`CONSTRAINTS`, junto con sus intérpretes genéricos, hacían que el entregable se
+pareciera a un framework de 518 líneas. Esa infraestructura se retiró del `.py`
+generado y quedó como trabajo de compilación del exportador.
+
+El generador reconoce familias numeradas y patrones algebraicos sin consultar
+el nombre del problema. Para la hidroeléctrica produce `periodos`, seis llamadas
+a `addVars`, cuatro bloques de balances/potencia/conversión/demanda y objetivos
+visibles (`Z1 = 100 * quicksum(GT[t])`, `Z2 = V[4]`). Las 12 restricciones de
+cotas se trasladan a `lb`/`ub`; las otras 16 permanecen como restricciones
+directas. Cuando no hay un patrón seguro, el fallback escribe `addVar` y
+`addConstr` directos, no estructuras interpretadas en ejecución.
+
+Las variables de cada corrida se muestran agrupadas por familia. Se conservaron
+la matriz de pagos real, el desempate, la fórmula epsilon, un modelo nuevo por
+corrida, MAX/MIN, Pareto y el gráfico aprobado. La prueba de tamaño ya no exige
+un archivo grande: comprueba contenido no vacío, sintaxis y un máximo razonable
+de 300 líneas para este benchmark.
 
 ## Protección del producto vigente
 

@@ -1,13 +1,8 @@
 """
 Problema: Generación Hidroeléctrica Biobjetivo Corregida - 4 Períodos
-Método: Método de las restricciones (epsilon-constraint)
-Solver: Gurobi
-
-Archivo académico autocontenido generado desde el modelo canónico del proyecto.
-No necesita el JSON original ni utiliza Pyomo, HiGHS o solver_optimizador.
+Método de las restricciones (epsilon-constraint) con Gurobi.
+Archivo autocontenido: no necesita el JSON ni el repositorio original.
 """
-
-from __future__ import annotations
 
 from pathlib import Path
 import sys
@@ -22,495 +17,260 @@ import matplotlib.pyplot as plt
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
-if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8")
 
 
-# ==================================================
-# 1. CONFIGURACIÓN
-# ==================================================
-
+# 1. CONFIGURACIÓN FÁCIL DE EDITAR
 PRIMARY_OBJECTIVE = 1
 R = 6
 TOL = 1e-6
 SHOW_GUROBI_LOG = False
 PLOT_FILE = Path(__file__).with_name('hidroelectrica_restricciones_gurobi_pareto.png')
 
-
-# ==================================================
-# 2. DATOS DEL PROBLEMA
-# ==================================================
-
 PROBLEM_NAME = 'Generación Hidroeléctrica Biobjetivo Corregida - 4 Períodos'
 PLOT_TITLE = 'Generación hidroeléctrica'
-VARIABLES = ['T1', 'T2', 'T3', 'T4', 'V1', 'V2', 'V3', 'V4', 'S1', 'S2', 'S3', 'S4', 'PH1', 'PH2', 'PH3',
- 'PH4', 'GH1', 'GH2', 'GH3', 'GH4', 'GT1', 'GT2', 'GT3', 'GT4']
-OBJECTIVES = [
-    {'id': 'Z1', 'name': 'Costo de generación térmica', 'sense': 'MIN', 'coefficients': {'GT1': 100.0, 'GT2': 100.0, 'GT3': 100.0, 'GT4': 100.0}},
-    {'id': 'Z2', 'name': 'Volumen final del embalse V4 (UH)', 'sense': 'MAX', 'coefficients': {'V4': 1.0}}
-]
-CONSTRAINTS = [
-    {'name': 'Balance_H1', 'coefficients': {'V1': 1.0, 'T1': 1.0, 'S1': 1.0}, 'operator': '=', 'rhs': 90.0},
-    {'name': 'Balance_H2', 'coefficients': {'V2': 1.0, 'V1': -1.0, 'T2': 1.0, 'S2': 1.0}, 'operator': '=', 'rhs': 20.0},
-    {'name': 'Balance_H3', 'coefficients': {'V3': 1.0, 'V2': -1.0, 'T3': 1.0, 'S3': 1.0}, 'operator': '=', 'rhs': 15.0},
-    {'name': 'Balance_H4', 'coefficients': {'V4': 1.0, 'V3': -1.0, 'T4': 1.0, 'S4': 1.0}, 'operator': '=', 'rhs': 10.0},
-    {'name': 'Turb_Pot_1', 'coefficients': {'PH1': 1.0, 'T1': -2.4525}, 'operator': '=', 'rhs': 0.0},
-    {'name': 'Turb_Pot_2', 'coefficients': {'PH2': 1.0, 'T2': -2.4525}, 'operator': '=', 'rhs': 0.0},
-    {'name': 'Turb_Pot_3', 'coefficients': {'PH3': 1.0, 'T3': -2.4525}, 'operator': '=', 'rhs': 0.0},
-    {'name': 'Turb_Pot_4', 'coefficients': {'PH4': 1.0, 'T4': -2.4525}, 'operator': '=', 'rhs': 0.0},
-    {'name': 'Pot_Ene_1', 'coefficients': {'GH1': 1.0, 'PH1': -1.0}, 'operator': '=', 'rhs': 0.0},
-    {'name': 'Pot_Ene_2', 'coefficients': {'GH2': 1.0, 'PH2': -1.0}, 'operator': '=', 'rhs': 0.0},
-    {'name': 'Pot_Ene_3', 'coefficients': {'GH3': 1.0, 'PH3': -1.0}, 'operator': '=', 'rhs': 0.0},
-    {'name': 'Pot_Ene_4', 'coefficients': {'GH4': 1.0, 'PH4': -1.0}, 'operator': '=', 'rhs': 0.0},
-    {'name': 'Demanda_P1', 'coefficients': {'GH1': 1.0, 'GT1': 1.0}, 'operator': '=', 'rhs': 60.0},
-    {'name': 'Demanda_P2', 'coefficients': {'GH2': 1.0, 'GT2': 1.0}, 'operator': '=', 'rhs': 80.0},
-    {'name': 'Demanda_P3', 'coefficients': {'GH3': 1.0, 'GT3': 1.0}, 'operator': '=', 'rhs': 70.0},
-    {'name': 'Demanda_P4', 'coefficients': {'GH4': 1.0, 'GT4': 1.0}, 'operator': '=', 'rhs': 90.0},
-    {'name': 'V_Min_1', 'coefficients': {'V1': 1.0}, 'operator': '>=', 'rhs': 40.0},
-    {'name': 'V_Min_2', 'coefficients': {'V2': 1.0}, 'operator': '>=', 'rhs': 40.0},
-    {'name': 'V_Min_3', 'coefficients': {'V3': 1.0}, 'operator': '>=', 'rhs': 40.0},
-    {'name': 'V_Min_4', 'coefficients': {'V4': 1.0}, 'operator': '>=', 'rhs': 40.0},
-    {'name': 'V_Max_1', 'coefficients': {'V1': 1.0}, 'operator': '<=', 'rhs': 100.0},
-    {'name': 'V_Max_2', 'coefficients': {'V2': 1.0}, 'operator': '<=', 'rhs': 100.0},
-    {'name': 'V_Max_3', 'coefficients': {'V3': 1.0}, 'operator': '<=', 'rhs': 100.0},
-    {'name': 'V_Max_4', 'coefficients': {'V4': 1.0}, 'operator': '<=', 'rhs': 100.0},
-    {'name': 'T_Max_1', 'coefficients': {'T1': 1.0}, 'operator': '<=', 'rhs': 70.0},
-    {'name': 'T_Max_2', 'coefficients': {'T2': 1.0}, 'operator': '<=', 'rhs': 70.0},
-    {'name': 'T_Max_3', 'coefficients': {'T3': 1.0}, 'operator': '<=', 'rhs': 70.0},
-    {'name': 'T_Max_4', 'coefficients': {'T4': 1.0}, 'operator': '<=', 'rhs': 70.0}
-]
+SENSES = ('MIN', 'MAX')
+OBJECTIVE_NAMES = ('Costo de generación térmica', 'Volumen final del embalse V4 (UH)')
 
 
-# ==================================================
-# 3. CONSTRUCCIÓN DEL MODELO
-# ==================================================
-
-def expresion_lineal(coeficientes, variables):
-    """Construye una expresión lineal dispersa."""
-    return gp.quicksum(
-        coeficiente * variables[nombre]
-        for nombre, coeficiente in coeficientes.items()
-    )
+# 2. DATOS COMPACTOS DEL PROBLEMA
+periodos = range(1, 5)
+balance_h_rhs = {2: 20, 3: 15, 4: 10}
+demanda_p_rhs = {1: 60, 2: 80, 3: 70, 4: 90}
+# 28 restricciones canónicas: 12 expresadas como cotas y 16 como ecuaciones/inecuaciones.
 
 
+# 3. MODELO GUROBI: VARIABLES, RESTRICCIONES Y OBJETIVOS
 def construir_modelo(nombre="modelo_epsilon"):
-    """Construye siempre un modelo limpio con las restricciones originales."""
-    modelo = gp.Model(nombre)
-    modelo.Params.OutputFlag = 1 if SHOW_GUROBI_LOG else 0
-    variables = {
-        nombre: modelo.addVar(lb=0.0, vtype=GRB.CONTINUOUS, name=nombre)
-        for nombre in VARIABLES
-    }
+    m = gp.Model(nombre)
+    m.Params.OutputFlag = int(SHOW_GUROBI_LOG)
 
-    for restriccion in CONSTRAINTS:
-        lhs = expresion_lineal(restriccion["coefficients"], variables)
-        operador = restriccion["operator"]
-        if operador == "<=":
-            modelo.addConstr(lhs <= restriccion["rhs"], name=restriccion["name"])
-        elif operador == ">=":
-            modelo.addConstr(lhs >= restriccion["rhs"], name=restriccion["name"])
+    T = m.addVars(periodos, lb=0, ub=70, name='T')
+    V = m.addVars(periodos, lb=40, ub=100, name='V')
+    S = m.addVars(periodos, lb=0, name='S')
+    PH = m.addVars(periodos, lb=0, name='PH')
+    GH = m.addVars(periodos, lb=0, name='GH')
+    GT = m.addVars(periodos, lb=0, name='GT')
+
+    x = {}
+    x.update({f"T{t}": T[t] for t in periodos})
+    x.update({f"V{t}": V[t] for t in periodos})
+    x.update({f"S{t}": S[t] for t in periodos})
+    x.update({f"PH{t}": PH[t] for t in periodos})
+    x.update({f"GH{t}": GH[t] for t in periodos})
+    x.update({f"GT{t}": GT[t] for t in periodos})
+
+    m.addConstr(V[1] + T[1] + S[1] == 90, name='Balance_H1')
+    m.addConstrs((V[t] - V[t - 1] + T[t] + S[t] == balance_h_rhs[t] for t in range(2, 5)),
+                 name='Balance_H')
+    m.addConstrs((PH[t] - 2.4525 * T[t] == 0 for t in range(1, 5)),
+                 name='Turb_Pot')
+    m.addConstrs((GH[t] - PH[t] == 0 for t in range(1, 5)),
+                 name='Pot_Ene')
+    m.addConstrs((GH[t] + GT[t] == demanda_p_rhs[t] for t in range(1, 5)),
+                 name='Demanda_P')
+
+    # Funciones objetivo originales, visibles en la formulación.
+    Z1 = 100 * gp.quicksum(GT[t] for t in periodos)
+    Z2 = V[4]
+    return m, x, Z1, Z2
+
+
+# 4. RESOLUCIÓN AUXILIAR Y MATRIZ DE PAGOS
+def valor(expresion):
+    """Evalúa tanto variables simples como expresiones lineales."""
+    return float(expresion.X if isinstance(expresion, gp.Var) else expresion.getValue())
+
+
+def optimizar(indice_objetivo, fijar=None, epsilon=None):
+    m, x, Z1, Z2 = construir_modelo()
+    objetivos = (Z1, Z2)
+    if fijar is not None:
+        indice, valor = fijar
+        m.addConstr(objetivos[indice - 1] == valor, name=f"fijar_Z{indice}")
+    if epsilon is not None:
+        indice, nivel = epsilon
+        if SENSES[indice - 1] == "MAX":
+            m.addConstr(objetivos[indice - 1] >= nivel, name=f"epsilon_Z{indice}")
         else:
-            modelo.addConstr(lhs == restriccion["rhs"], name=restriccion["name"])
-    return modelo, variables
+            m.addConstr(objetivos[indice - 1] <= nivel, name=f"epsilon_Z{indice}")
 
-
-# ==================================================
-# 4. FUNCIONES OBJETIVO
-# ==================================================
-
-def expresion_objetivo(indice, variables):
-    return expresion_lineal(OBJECTIVES[indice - 1]["coefficients"], variables)
-
-
-def sentido_gurobi(indice):
-    return (
-        GRB.MAXIMIZE
-        if OBJECTIVES[indice - 1]["sense"] == "MAX"
-        else GRB.MINIMIZE
-    )
-
-
-def evaluar_objetivos(solucion):
-    """Evalúa Z1 y Z2 desde exactamente el mismo vector x publicado."""
-    return {
-        f"Z{indice}": sum(
-            coeficiente * solucion.get(nombre, 0.0)
-            for nombre, coeficiente in objetivo["coefficients"].items()
-        )
-        for indice, objetivo in enumerate(OBJECTIVES, start=1)
-    }
-
-
-def nombre_estado(codigo):
+    sentido = GRB.MAXIMIZE if SENSES[indice_objetivo - 1] == "MAX" else GRB.MINIMIZE
+    m.setObjective(objetivos[indice_objetivo - 1], sentido)
+    inicio = time.perf_counter()
+    m.optimize()
     estados = {
-        GRB.OPTIMAL: "OPTIMAL",
-        GRB.INFEASIBLE: "INFEASIBLE",
-        GRB.UNBOUNDED: "UNBOUNDED",
-        GRB.INF_OR_UNBD: "INF_OR_UNBD",
+        GRB.OPTIMAL: "OPTIMAL", GRB.INFEASIBLE: "INFEASIBLE",
+        GRB.UNBOUNDED: "UNBOUNDED", GRB.INF_OR_UNBD: "INF_OR_UNBD",
     }
-    return estados.get(codigo, f"STATUS_{codigo}")
-
-
-def extraer_solucion(modelo, variables):
-    if modelo.Status != GRB.OPTIMAL:
-        return None
-    return {nombre: float(variables[nombre].X) for nombre in VARIABLES}
-
-
-# ==================================================
-# 5. MATRIZ DE PAGOS
-# ==================================================
-
-def resolver_ancla(indice_primario):
-    """Optimiza Zi y desempata con el otro objetivo, fijando Zi exactamente."""
-    indice_secundario = 2 if indice_primario == 1 else 1
-
-    modelo, variables = construir_modelo(f"ancla_Z{indice_primario}_primaria")
-    objetivo_primario = expresion_objetivo(indice_primario, variables)
-    modelo.setObjective(objetivo_primario, sentido_gurobi(indice_primario))
-    modelo.optimize()
-    estado_primario = nombre_estado(modelo.Status)
-    solucion_primaria = extraer_solucion(modelo, variables)
-    if solucion_primaria is None:
-        modelo.dispose()
-        return {"status": estado_primario, "x": None, "Z1": None, "Z2": None}
-
-    valor_primario = evaluar_objetivos(solucion_primaria)[f"Z{indice_primario}"]
-    modelo.dispose()
-
-    # Segundo modelo limpio: conserva el óptimo primario y optimiza el restante.
-    modelo, variables = construir_modelo(f"ancla_Z{indice_primario}_desempate")
-    objetivo_primario = expresion_objetivo(indice_primario, variables)
-    modelo.addConstr(
-        objetivo_primario == valor_primario,
-        name=f"fijar_optimo_Z{indice_primario}",
-    )
-    modelo.setObjective(
-        expresion_objetivo(indice_secundario, variables),
-        sentido_gurobi(indice_secundario),
-    )
-    modelo.optimize()
-    solucion = extraer_solucion(modelo, variables)
-    if solucion is None:
-        # El primer resultado sigue siendo una ancla válida si falla el desempate.
-        solucion = solucion_primaria
-        estado = estado_primario
-    else:
-        estado = nombre_estado(modelo.Status)
-    modelo.dispose()
-    valores = evaluar_objetivos(solucion)
-    return {"status": estado, "x": solucion, **valores}
+    resultado = {
+        "status": estados.get(m.Status, f"STATUS_{m.Status}"),
+        "x": None, "Z1": None, "Z2": None,
+        "time": time.perf_counter() - inicio,
+    }
+    if m.Status == GRB.OPTIMAL:
+        resultado.update(
+            x={nombre: float(variable.X) for nombre, variable in x.items()},
+            Z1=valor(Z1), Z2=valor(Z2),
+        )
+    m.dispose()
+    return resultado
 
 
 def calcular_matriz_pagos():
-    """Cada fila procede de optimizaciones Gurobi reales."""
-    matriz = {
-        "opt_Z1": resolver_ancla(1),
-        "opt_Z2": resolver_ancla(2),
-    }
-    fallidas = [nombre for nombre, fila in matriz.items() if fila["x"] is None]
-    if fallidas:
-        raise RuntimeError(
-            "No fue posible construir la matriz de pagos: " + ", ".join(fallidas)
-        )
+    matriz = {}
+    for indice in (1, 2):
+        primera = optimizar(indice)
+        if primera["status"] != "OPTIMAL":
+            raise RuntimeError(f"No se pudo optimizar Z{indice}: {primera['status']}")
+        otro = 2 if indice == 1 else 1
+        # Desempate: fija el óptimo primario y optimiza el otro objetivo.
+        fila = optimizar(otro, fijar=(indice, primera[f"Z{indice}"]))
+        matriz[f"opt_Z{indice}"] = fila if fila["status"] == "OPTIMAL" else primera
     return matriz
 
 
-# ==================================================
-# 6. NIVELES EPSILON
-# ==================================================
-
+# 5. NIVELES Y BARRIDO EPSILON
 def generar_niveles_epsilon(z_min, z_max, r):
-    """E_t = Z_min + (t/r)(Z_max - Z_min), para t = 0, ..., r."""
-    if not isinstance(r, int) or isinstance(r, bool) or r < 1:
-        raise ValueError("R debe ser un entero mayor o igual que 1.")
+    # E_t = Z_min + (t/r)(Z_max - Z_min), para t=0,...,r.
     niveles = [z_min + (t / r) * (z_max - z_min) for t in range(r + 1)]
-    niveles[0] = z_min
-    niveles[-1] = z_max
+    niveles[0], niveles[-1] = z_min, z_max
     return niveles
 
 
-# ==================================================
-# 7. BARRIDO EPSILON
-# ==================================================
-
-def ejecutar_barrido(niveles):
-    indice_restringido = 2 if PRIMARY_OBJECTIVE == 1 else 1
-    objetivo_restringido = OBJECTIVES[indice_restringido - 1]
+def resolver_epsilon(niveles):
+    restringido = 2 if PRIMARY_OBJECTIVE == 1 else 1
     corridas = []
-
-    for t, nivel in enumerate(niveles):
-        inicio = time.perf_counter()
-        # Se construye un modelo nuevo: ninguna restricción epsilon se acumula.
-        modelo, variables = construir_modelo(f"epsilon_t_{t}")
-        expresion_restringida = expresion_objetivo(indice_restringido, variables)
-        if objetivo_restringido["sense"] == "MAX":
-            modelo.addConstr(
-                expresion_restringida >= nivel,
-                name=f"epsilon_Z{indice_restringido}_t_{t}",
-            )
-            operador = ">="
-        else:
-            modelo.addConstr(
-                expresion_restringida <= nivel,
-                name=f"epsilon_Z{indice_restringido}_t_{t}",
-            )
-            operador = "<="
-
-        modelo.setObjective(
-            expresion_objetivo(PRIMARY_OBJECTIVE, variables),
-            sentido_gurobi(PRIMARY_OBJECTIVE),
-        )
-        modelo.optimize()
-        estado = nombre_estado(modelo.Status)
-        solucion = extraer_solucion(modelo, variables)
-        corrida = {
-            "run_index": t,
-            "t": t,
-            "E": nivel,
-            "operator": operador,
-            "status": estado,
-            "x": solucion,
-            "Z1": None,
-            "Z2": None,
-            "execution_time_sec": time.perf_counter() - inicio,
-        }
-        if solucion is not None:
-            corrida.update(evaluar_objetivos(solucion))
-        corridas.append(corrida)
-        modelo.dispose()
+    for t, E in enumerate(niveles):
+        # optimizar() crea un modelo nuevo: las restricciones no se acumulan.
+        resultado = optimizar(PRIMARY_OBJECTIVE, epsilon=(restringido, E))
+        resultado.update(t=t, E=E)
+        corridas.append(resultado)
     return corridas
 
 
-# ==================================================
-# 8. RESULTADOS Y PARETO
-# ==================================================
-
-def soluciones_unicas(corridas):
+# 6. SOLUCIONES ÚNICAS Y DOMINANCIA DE PARETO
+def resumir_soluciones(corridas):
     unicas = []
     for corrida in corridas:
-        if corrida["status"] != "OPTIMAL" or corrida["x"] is None:
+        if corrida["status"] != "OPTIMAL":
             continue
-        repetida = None
-        for solucion in unicas:
-            mismo_x = all(
-                abs(corrida["x"][nombre] - solucion["x"][nombre]) <= TOL
-                for nombre in VARIABLES
-            )
-            mismos_objetivos = (
-                abs(corrida["Z1"] - solucion["Z1"]) <= TOL
-                and abs(corrida["Z2"] - solucion["Z2"]) <= TOL
-            )
-            if mismo_x and mismos_objetivos:
-                repetida = solucion
-                break
-        if repetida is not None:
-            repetida["run_indices"].append(corrida["run_index"])
-            repetida["epsilon_levels"].append(corrida["E"])
-            continue
-        unicas.append(
-            {
-                "id": f"S{len(unicas) + 1}",
-                "x": dict(corrida["x"]),
-                "Z1": corrida["Z1"],
-                "Z2": corrida["Z2"],
-                "run_indices": [corrida["run_index"]],
-                "epsilon_levels": [corrida["E"]],
-                "pareto_status": "No evaluada",
-            }
+        repetida = next((s for s in unicas if
+            all(abs(corrida["x"][v] - s["x"][v]) <= TOL for v in corrida["x"])
+            and abs(corrida["Z1"] - s["Z1"]) <= TOL
+            and abs(corrida["Z2"] - s["Z2"]) <= TOL), None)
+        if repetida:
+            repetida["niveles"].append(corrida["E"])
+        else:
+            unicas.append({
+                "id": f"S{len(unicas) + 1}", "x": corrida["x"],
+                "Z1": corrida["Z1"], "Z2": corrida["Z2"],
+                "niveles": [corrida["E"]], "no_dominada": True,
+            })
+
+    def no_peor(a, b, sentido):
+        return a >= b - TOL if sentido == "MAX" else a <= b + TOL
+
+    def mejor(a, b, sentido):
+        return a > b + TOL if sentido == "MAX" else a < b - TOL
+
+    for s in unicas:
+        s["no_dominada"] = not any(
+            no_peor(c["Z1"], s["Z1"], SENSES[0])
+            and no_peor(c["Z2"], s["Z2"], SENSES[1])
+            and (mejor(c["Z1"], s["Z1"], SENSES[0])
+                 or mejor(c["Z2"], s["Z2"], SENSES[1]))
+            for c in unicas if c is not s
         )
     return unicas
 
 
-def no_peor(candidato, referencia, sentido):
-    if sentido == "MAX":
-        return candidato >= referencia - TOL
-    return candidato <= referencia + TOL
-
-
-def estrictamente_mejor(candidato, referencia, sentido):
-    if sentido == "MAX":
-        return candidato > referencia + TOL
-    return candidato < referencia - TOL
-
-
-def clasificar_pareto(unicas):
-    for solucion in unicas:
-        solucion["pareto_status"] = "No dominada"
-        for candidata in unicas:
-            if candidata is solucion:
-                continue
-            no_peor_z1 = no_peor(
-                candidata["Z1"], solucion["Z1"], OBJECTIVES[0]["sense"]
-            )
-            no_peor_z2 = no_peor(
-                candidata["Z2"], solucion["Z2"], OBJECTIVES[1]["sense"]
-            )
-            mejor_z1 = estrictamente_mejor(
-                candidata["Z1"], solucion["Z1"], OBJECTIVES[0]["sense"]
-            )
-            mejor_z2 = estrictamente_mejor(
-                candidata["Z2"], solucion["Z2"], OBJECTIVES[1]["sense"]
-            )
-            if no_peor_z1 and no_peor_z2 and (mejor_z1 or mejor_z2):
-                solucion["pareto_status"] = f"Dominada por {candidata['id']}"
-                break
-    return unicas
-
-
+# 7. SALIDA ACADÉMICA
 def numero(valor):
-    if valor is None:
-        return "-"
-    return f"{valor:.10g}"
+    return "-" if valor is None else f"{valor:.10g}"
 
 
-def imprimir_resultados(matriz, indice_restringido, z_min, z_max, niveles, corridas, unicas):
+def imprimir(matriz, niveles, corridas, unicas):
     print("\nMatriz de pagos")
-    print("  ancla       Z1             Z2")
     for nombre, fila in matriz.items():
-        print(f"  {nombre:<10} {fila['Z1']:>14.6f} {fila['Z2']:>14.6f}")
-
-    print(f"\nZ{indice_restringido}_min = {numero(z_min)}")
-    print(f"Z{indice_restringido}_max = {numero(z_max)}")
-    print(f"r = {R}")
-    print("Fórmula: E_t = Z_min + (t/r)(Z_max - Z_min)")
-    print("Niveles E = [" + ", ".join(numero(valor) for valor in niveles) + "]")
-
-    print("\nCorridas epsilon")
-    print("  t | E            | operador | estado       | Z1             | Z2")
+        print(f"  {nombre}: Z1={numero(fila['Z1'])}; Z2={numero(fila['Z2'])}")
+    print("\nNiveles E = [" + ", ".join(numero(E) for E in niveles) + "]")
+    print("\nCorridas")
     for corrida in corridas:
-        print(
-            f"  {corrida['t']:>1} | {numero(corrida['E']):<12} | "
-            f"{corrida['operator']:^8} | {corrida['status']:<12} | "
-            f"{numero(corrida['Z1']):>14} | {numero(corrida['Z2']):>14}"
-        )
-        if corrida["x"] is not None:
-            print("    Variables:")
-            for nombre in VARIABLES:
-                print(f"      {nombre:<16} = {numero(corrida['x'][nombre])}")
-
+        print(f"t={corrida['t']}; E={numero(corrida['E'])}; "
+              f"estado={corrida['status']}; Z1={numero(corrida['Z1'])}; "
+              f"Z2={numero(corrida['Z2'])}")
+        if corrida["x"]:
+            print("  T =", [numero(corrida['x'][f"T{t}"]) for t in periodos])
+            print("  V =", [numero(corrida['x'][f"V{t}"]) for t in periodos])
+            print("  S =", [numero(corrida['x'][f"S{t}"]) for t in periodos])
+            print("  PH =", [numero(corrida['x'][f"PH{t}"]) for t in periodos])
+            print("  GH =", [numero(corrida['x'][f"GH{t}"]) for t in periodos])
+            print("  GT =", [numero(corrida['x'][f"GT{t}"]) for t in periodos])
     print(f"\nSoluciones únicas: {len(unicas)}")
-    for solucion in unicas:
-        print(
-            f"  {solucion['id']}: Z1={numero(solucion['Z1'])}; "
-            f"Z2={numero(solucion['Z2'])}; {solucion['pareto_status']}"
-        )
-
-    no_dominadas = [s for s in unicas if s["pareto_status"] == "No dominada"]
-    print("\nSoluciones no dominadas obtenidas por el barrido:")
-    for solucion in no_dominadas:
-        print(f"  {solucion['id']}: ({numero(solucion['Z1'])}, {numero(solucion['Z2'])})")
+    for s in unicas:
+        estado = "No dominada" if s["no_dominada"] else "Dominada"
+        print(f"  {s['id']}: ({numero(s['Z1'])}, {numero(s['Z2'])}); {estado}")
+    print("\nSoluciones no dominadas obtenidas por el barrido")
+    for s in unicas:
+        if s["no_dominada"]:
+            print(f"  {s['id']}: ({numero(s['Z1'])}, {numero(s['Z2'])})")
 
 
-# ==================================================
-# 9. GRÁFICO
-# ==================================================
-
-def disposicion_etiquetas(puntos):
-    if not puntos:
-        return []
-    xs = [punto["Z1"] for punto in puntos]
-    ys = [punto["Z2"] for punto in puntos]
-    x_min, x_max = min(xs), max(xs)
-    y_min, y_max = min(ys), max(ys)
-    x_rango = x_max - x_min
-    y_rango = y_max - y_min
-    posiciones = []
-    for indice, punto in enumerate(puntos):
-        x_ratio = 0.5 if x_rango == 0 else (punto["Z1"] - x_min) / x_rango
-        y_ratio = 0.5 if y_rango == 0 else (punto["Z2"] - y_min) / y_rango
-        dx = 10 if x_ratio <= 0.2 else -10 if x_ratio >= 0.8 else (10 if indice % 2 == 0 else -10)
-        dy = 12 if y_ratio <= 0.2 else -12 if y_ratio >= 0.8 else (12 if indice % 4 < 2 else -12)
-        posiciones.append((dx, dy))
-    return posiciones
-
-
+# 8. GRÁFICO
 def crear_grafico(unicas):
-    validas = [solucion for solucion in unicas if solucion["x"] is not None]
-    no_dominadas = [
-        solucion for solucion in validas if solucion["pareto_status"] == "No dominada"
-    ]
-    dominadas = [
-        solucion for solucion in validas if solucion["pareto_status"] != "No dominada"
-    ]
-    figura, eje = plt.subplots(figsize=(10, 6.5))
+    no_dominadas = [s for s in unicas if s["no_dominada"]]
+    dominadas = [s for s in unicas if not s["no_dominada"]]
+    fig, ax = plt.subplots(figsize=(10, 6.5))
     if dominadas:
-        eje.scatter(
-            [s["Z1"] for s in dominadas],
-            [s["Z2"] for s in dominadas],
-            color="#7f8c8d", marker="x", s=60,
-            label="Soluciones dominadas obtenidas", zorder=3,
-        )
+        ax.scatter([s["Z1"] for s in dominadas], [s["Z2"] for s in dominadas],
+                   color="#7f8c8d", marker="x", label="Soluciones dominadas obtenidas")
     if no_dominadas:
-        ordenadas = sorted(no_dominadas, key=lambda solucion: solucion["Z1"])
-        eje.plot(
-            [s["Z1"] for s in ordenadas],
-            [s["Z2"] for s in ordenadas],
-            color="#4f97c9", linewidth=1.5, zorder=2,
-        )
-        eje.scatter(
-            [s["Z1"] for s in no_dominadas],
-            [s["Z2"] for s in no_dominadas],
-            color="#d62728", edgecolor="white", linewidth=0.8, s=72,
-            label="Soluciones no dominadas obtenidas", zorder=4,
-        )
+        ordenadas = sorted(no_dominadas, key=lambda s: s["Z1"])
+        ax.plot([s["Z1"] for s in ordenadas], [s["Z2"] for s in ordenadas],
+                color="#4f97c9", linewidth=1.5)
+        ax.scatter([s["Z1"] for s in no_dominadas], [s["Z2"] for s in no_dominadas],
+                   color="#d62728", edgecolor="white", s=72,
+                   label="Soluciones no dominadas obtenidas", zorder=3)
 
-    for solucion, (dx, dy) in zip(validas, disposicion_etiquetas(validas)):
-        niveles = ",".join(numero(valor) for valor in solucion["epsilon_levels"])
-        eje.annotate(
-            f"{solucion['id']}\nE={niveles}",
-            xy=(solucion["Z1"], solucion["Z2"]),
-            xytext=(dx, dy), textcoords="offset points", fontsize=8,
-            ha="left" if dx > 0 else "right",
-            va="bottom" if dy > 0 else "top",
-            bbox={"boxstyle": "round,pad=0.2", "fc": "white", "ec": "#bbbbbb", "alpha": 0.9},
-            arrowprops={"arrowstyle": "-", "color": "#999999", "lw": 0.6},
-            zorder=5,
-        )
-
-    sentido_z1 = OBJECTIVES[0]["sense"]
-    sentido_z2 = OBJECTIVES[1]["sense"]
-    eje.set_title(
-        f"Frontera de Pareto — {PLOT_TITLE}\n"
-        f"Método de las restricciones | Z1 {sentido_z1} · Z2 {sentido_z2}"
-    )
-    eje.set_xlabel(f"Z1 — {OBJECTIVES[0]['name']} ({sentido_z1})")
-    eje.set_ylabel(f"Z2 — {OBJECTIVES[1]['name']} ({sentido_z2})")
-    eje.margins(x=0.06, y=0.1)
-    eje.grid(True, linestyle="--", linewidth=0.6, alpha=0.45)
-    if validas:
-        eje.legend(loc="best")
-    figura.tight_layout()
-    figura.savefig(PLOT_FILE, format="png", dpi=160, bbox_inches="tight", pad_inches=0.2)
-    plt.close(figura)
+    xs, ys = [s["Z1"] for s in unicas], [s["Z2"] for s in unicas]
+    for i, s in enumerate(unicas):
+        xr = 0.5 if max(xs) == min(xs) else (s["Z1"] - min(xs)) / (max(xs) - min(xs))
+        yr = 0.5 if max(ys) == min(ys) else (s["Z2"] - min(ys)) / (max(ys) - min(ys))
+        dx = 10 if xr <= 0.2 else -10 if xr >= 0.8 else (10 if i % 2 == 0 else -10)
+        dy = 12 if yr <= 0.2 else -12 if yr >= 0.8 else (12 if i % 4 < 2 else -12)
+        ax.annotate(f"{s['id']}\nE={numero(s['niveles'][0])}", (s["Z1"], s["Z2"]),
+                    xytext=(dx, dy), textcoords="offset points", fontsize=8,
+                    ha="left" if dx > 0 else "right", va="bottom" if dy > 0 else "top",
+                    bbox={"boxstyle": "round,pad=0.2", "fc": "white", "ec": "#bbbbbb"},
+                    arrowprops={"arrowstyle": "-", "color": "#999999", "lw": 0.6})
+    ax.set_title(f"Frontera de Pareto — {PLOT_TITLE}\n"
+                 f"Método de las restricciones | Z1 {SENSES[0]} · Z2 {SENSES[1]}")
+    ax.set_xlabel(f"Z1 — {OBJECTIVE_NAMES[0]} ({SENSES[0]})")
+    ax.set_ylabel(f"Z2 — {OBJECTIVE_NAMES[1]} ({SENSES[1]})")
+    ax.margins(x=0.06, y=0.1)
+    ax.grid(True, linestyle="--", alpha=0.45)
+    if unicas:
+        ax.legend(loc="best")
+    fig.tight_layout()
+    fig.savefig(PLOT_FILE, dpi=160, bbox_inches="tight", pad_inches=0.2)
+    plt.close(fig)
     print(f"\nGráfico guardado en: {PLOT_FILE}")
 
 
 def main():
-    if PRIMARY_OBJECTIVE not in (1, 2):
-        raise ValueError("PRIMARY_OBJECTIVE debe ser 1 o 2.")
-    version = ".".join(str(parte) for parte in gp.gurobi.version())
-    indice_restringido = 2 if PRIMARY_OBJECTIVE == 1 else 1
-    print("=" * 72)
+    if PRIMARY_OBJECTIVE not in (1, 2) or R < 1:
+        raise ValueError("PRIMARY_OBJECTIVE debe ser 1 o 2 y R debe ser >= 1.")
+    restringido = 2 if PRIMARY_OBJECTIVE == 1 else 1
     print("MÉTODO DE LAS RESTRICCIONES — GUROBI")
-    print("=" * 72)
-    print(f"Gurobi version: {version}")
-    print(f"Problema: {PROBLEM_NAME}")
-    print("Método: epsilon-constraint")
-    print(f"Objetivo principal: Z{PRIMARY_OBJECTIVE} ({OBJECTIVES[PRIMARY_OBJECTIVE - 1]['sense']})")
-    print(f"Objetivo restringido: Z{indice_restringido} ({OBJECTIVES[indice_restringido - 1]['sense']})")
-    print(f"Configuración: PRIMARY_OBJECTIVE={PRIMARY_OBJECTIVE}; R={R}")
-
+    print("Gurobi version:", ".".join(map(str, gp.gurobi.version())))
+    print("Problema:", PROBLEM_NAME)
+    print(f"Objetivo principal: Z{PRIMARY_OBJECTIVE}; restringido: Z{restringido}; R={R}")
     matriz = calcular_matriz_pagos()
-    valores_restringidos = [fila[f"Z{indice_restringido}"] for fila in matriz.values()]
-    z_min = min(valores_restringidos)
-    z_max = max(valores_restringidos)
-    niveles = generar_niveles_epsilon(z_min, z_max, R)
-    corridas = ejecutar_barrido(niveles)
-    unicas = clasificar_pareto(soluciones_unicas(corridas))
-    imprimir_resultados(
-        matriz, indice_restringido, z_min, z_max, niveles, corridas, unicas
-    )
+    columna = [fila[f"Z{restringido}"] for fila in matriz.values()]
+    niveles = generar_niveles_epsilon(min(columna), max(columna), R)
+    corridas = resolver_epsilon(niveles)
+    unicas = resumir_soluciones(corridas)
+    imprimir(matriz, niveles, corridas, unicas)
     crear_grafico(unicas)
 
 

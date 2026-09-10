@@ -62,7 +62,8 @@ def test_genera_archivo_hidroelectrico_no_vacio_y_compilable(generated) -> None:
     output, source = generated
 
     assert output.is_file()
-    assert output.stat().st_size > 15_000
+    assert output.stat().st_size > 0
+    assert len(source.splitlines()) <= 300
     ast.parse(source)
     compile(source, str(output), "exec")
 
@@ -119,33 +120,45 @@ def test_archivo_generado_no_necesita_json_ni_repositorio(
     compile(portable_file.read_text(encoding="utf-8"), str(portable_file), "exec")
 
 
-def test_datos_embebidos_coinciden_con_modelo_canonico(generated, exporter) -> None:
+def test_plan_directo_conserva_todo_el_modelo_canonico(generated, exporter) -> None:
     _, source = generated
     canonical = exporter.load_canonical_biobjective(HYDRO_PATH)
+    plan = exporter.build_render_plan(canonical)
 
-    assert _assignment(source, "VARIABLES") == canonical["variables"]
-    assert _assignment(source, "OBJECTIVES") == canonical["objectives"]
-    assert _assignment(source, "CONSTRAINTS") == canonical["constraints"]
-    assert len(_assignment(source, "VARIABLES")) == 24
-    assert len(_assignment(source, "CONSTRAINTS")) == 28
+    assert len(canonical["variables"]) == 24
+    assert len(canonical["constraints"]) == 28
+    assert plan["folded_bounds"] == 12
+    assert plan["direct_constraints"] == 16
+    assert "28 restricciones canónicas" in source
+    assert "CONSTRAINTS =" not in source
+    assert "OBJECTIVES =" not in source
+    assert "VARIABLES =" not in source
 
 
 def test_objetivos_hidroelectricos_embebidos_son_exactos(generated) -> None:
     _, source = generated
-    objectives = _assignment(source, "OBJECTIVES")
 
-    assert objectives[0] == {
-        "id": "Z1",
-        "name": "Costo de generación térmica",
-        "sense": "MIN",
-        "coefficients": {f"GT{period}": 100.0 for period in range(1, 5)},
-    }
-    assert objectives[1] == {
-        "id": "Z2",
-        "name": "Volumen final del embalse V4 (UH)",
-        "sense": "MAX",
-        "coefficients": {"V4": 1.0},
-    }
+    assert _assignment(source, "SENSES") == ("MIN", "MAX")
+    assert _assignment(source, "OBJECTIVE_NAMES") == (
+        "Costo de generación térmica",
+        "Volumen final del embalse V4 (UH)",
+    )
+    assert "Z1 = 100 * gp.quicksum(GT[t] for t in periodos)" in source
+    assert "Z2 = V[4]" in source
+    assert "def valor(expresion)" in source
+    assert "isinstance(expresion, gp.Var)" in source
+    assert "Z1=valor(Z1), Z2=valor(Z2)" in source
+
+
+def test_formulacion_hidroelectrica_usa_gurobi_natural(generated) -> None:
+    _, source = generated
+
+    assert "periodos = range(1, 5)" in source
+    assert "T = m.addVars(periodos, lb=0, ub=70, name='T')" in source
+    assert "V = m.addVars(periodos, lb=40, ub=100, name='V')" in source
+    assert "m.addConstrs((PH[t] - 2.4525 * T[t] == 0" in source
+    assert "m.addConstrs((GH[t] - PH[t] == 0" in source
+    assert "m.addConstrs((GH[t] + GT[t] == demanda_p_rhs[t]" in source
 
 
 def test_configuracion_epsilon_es_editable_y_exacta(generated) -> None:
@@ -155,28 +168,29 @@ def test_configuracion_epsilon_es_editable_y_exacta(generated) -> None:
     assert _assignment(source, "R") == 6
     assert "E_t = Z_min + (t/r)(Z_max - Z_min)" in source
     assert "range(r + 1)" in source
-    assert "for t, nivel in enumerate(niveles)" in source
+    assert "for t, E in enumerate(niveles)" in source
 
 
 def test_barrido_maneja_max_min_y_no_acumula_epsilon(generated) -> None:
     _, source = generated
 
-    assert 'objetivo_restringido["sense"] == "MAX"' in source
-    assert "expresion_restringida >= nivel" in source
-    assert "expresion_restringida <= nivel" in source
-    assert 'construir_modelo(f"epsilon_t_{t}")' in source
-    assert "ninguna restricción epsilon se acumula" in source
+    assert 'SENSES[indice - 1] == "MAX"' in source
+    assert "objetivos[indice - 1] >= nivel" in source
+    assert "objetivos[indice - 1] <= nivel" in source
+    assert "m, x, Z1, Z2 = construir_modelo()" in source
+    assert "las restricciones no se acumulan" in source
 
 
 def test_matriz_de_pagos_se_resuelve_y_no_usa_set_objective_n(generated) -> None:
     _, source = generated
 
-    assert '"opt_Z1": resolver_ancla(1)' in source
-    assert '"opt_Z2": resolver_ancla(2)' in source
-    assert "fijar_optimo_Z" in source
+    assert "for indice in (1, 2):" in source
+    assert "primera = optimizar(indice)" in source
+    assert 'fila = optimizar(otro, fijar=(indice, primera[f"Z{indice}"]))' in source
+    assert 'matriz[f"opt_Z{indice}"]' in source
     assert ".setObjective(" in source
     assert "setObjectiveN" not in source
-    assert "modelo.optimize()" in source
+    assert "m.optimize()" in source
 
 
 def test_estados_pareto_y_grafico_estan_incluidos(generated) -> None:
@@ -184,10 +198,10 @@ def test_estados_pareto_y_grafico_estan_incluidos(generated) -> None:
 
     for status in ("GRB.OPTIMAL", "GRB.INFEASIBLE", "GRB.UNBOUNDED", "GRB.INF_OR_UNBD"):
         assert status in source
-    assert "def clasificar_pareto" in source
+    assert "def resumir_soluciones" in source
     assert "Soluciones no dominadas obtenidas por el barrido" in source
     assert "matplotlib.use(\"Agg\")" in source
-    assert "figura.savefig(PLOT_FILE" in source
+    assert "fig.savefig(PLOT_FILE" in source
     assert "Soluciones no dominadas obtenidas" in source
 
 
@@ -196,9 +210,9 @@ def test_grafico_contiene_textos_descriptivos_aprobados(generated) -> None:
 
     assert _assignment(source, "PLOT_TITLE") == "Generación hidroeléctrica"
     assert "Frontera de Pareto — {PLOT_TITLE}" in source
-    assert "Método de las restricciones | Z1 {sentido_z1} · Z2 {sentido_z2}" in source
-    assert "Z1 — {OBJECTIVES[0]['name']}" in source
-    assert "Z2 — {OBJECTIVES[1]['name']}" in source
+    assert "Método de las restricciones | Z1 {SENSES[0]} · Z2 {SENSES[1]}" in source
+    assert "Z1 — {OBJECTIVE_NAMES[0]} ({SENSES[0]})" in source
+    assert "Z2 — {OBJECTIVE_NAMES[1]} ({SENSES[1]})" in source
 
 
 def test_cli_exporta_sin_importar_gurobipy(tmp_path: Path) -> None:
@@ -270,9 +284,15 @@ def test_json_11_indexado_se_expande_y_exporta(tmp_path: Path, exporter) -> None
     exporter.export_gurobi_script(UNIFIED_PATH, output, primary=2, r=4)
     source = output.read_text(encoding="utf-8")
     state = deserialize_model(UNIFIED_PATH.read_text(encoding="utf-8"))
+    canonical = exporter.load_canonical_biobjective(UNIFIED_PATH)
+    plan = exporter.build_render_plan(canonical)
 
-    assert _assignment(source, "VARIABLES") == state["var_names"]
-    assert len(_assignment(source, "CONSTRAINTS")) == len(state["constraints_data"])
+    assert canonical["variables"] == state["var_names"]
+    assert plan["folded_bounds"] + plan["direct_constraints"] == len(
+        state["constraints_data"]
+    )
+    assert "CONSTRAINTS =" not in source
+    assert "OBJECTIVES =" not in source
     assert _assignment(source, "PRIMARY_OBJECTIVE") == 2
     assert _assignment(source, "R") == 4
     compile(source, str(output), "exec")
@@ -298,12 +318,7 @@ def test_preserva_las_cuatro_combinaciones_de_sentidos(
     output = tmp_path / f"{sense1}_{sense2}.py"
 
     exporter.export_gurobi_script(model_file, output, primary=1, r=2)
-    senses = [
-        objective["sense"]
-        for objective in _assignment(
-            output.read_text(encoding="utf-8"), "OBJECTIVES"
-        )
-    ]
+    senses = list(_assignment(output.read_text(encoding="utf-8"), "SENSES"))
 
     assert senses == [
         "MAX" if sense1 == "Maximizar" else "MIN",

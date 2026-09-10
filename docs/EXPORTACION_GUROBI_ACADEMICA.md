@@ -12,9 +12,10 @@ problema.json
 archivo_academico_gurobi.py
 ```
 
-El archivo resultante contiene sus variables, restricciones, objetivos,
-matriz de pagos, niveles epsilon, barrido, clasificación de Pareto y gráfico.
-No necesita el JSON original ni ningún módulo de este repositorio al ejecutarse.
+El archivo resultante contiene sus variables, restricciones y objetivos como
+sentencias Gurobi directas, además de matriz de pagos, niveles epsilon, barrido,
+clasificación de Pareto y gráfico. No necesita el JSON original ni ningún
+módulo de este repositorio al ejecutarse.
 
 ## Generar el archivo
 
@@ -36,6 +37,13 @@ El exportador admite modelos biobjetivo JSON 1.0 y 1.1. Los modelos 1.1 con
 familias se validan y expanden primero a la representación canónica dispersa
 usada por el solver general. La primera versión del entregable Gurobi es
 deliberadamente biobjetivo y de variables continuas no negativas.
+
+Antes de escribir el archivo, el exportador reconoce de forma general familias
+unidimensionales numeradas y restricciones con el mismo patrón. Cuando puede
+hacerlo de manera segura genera `addVars`, `addConstrs` y comprensiones; en los
+demás casos emite `addVar` y `addConstr` directos. No contiene una condición
+especial basada en el nombre del modelo y el entregable no interpreta listas
+genéricas de restricciones en tiempo de ejecución.
 
 ## Ejecutar el entregable
 
@@ -138,6 +146,26 @@ R = 6
 Su formulación embebida procede directamente de
 `models/hidroelectrica_biobjetivo.json`: 24 variables, 28 restricciones,
 `MIN Z1 = 100 sum(GT_t)` y `MAX Z2 = V4`.
+
+En el archivo generado se leen directamente estructuras como estas:
+
+```python
+periodos = range(1, 5)
+T = m.addVars(periodos, lb=0, ub=70, name="T")
+V = m.addVars(periodos, lb=40, ub=100, name="V")
+m.addConstrs(PH[t] == 2.4525 * T[t] for t in periodos)
+Z1 = 100 * gp.quicksum(GT[t] for t in periodos)
+Z2 = V[4]
+```
+
+Las 12 restricciones simples de cotas se expresan naturalmente como límites de
+`T` y `V`; las otras 16 se muestran como ecuaciones Gurobi. Esta representación
+es matemáticamente equivalente a las 28 restricciones canónicas originales.
+Las variables de cada corrida se imprimen agrupadas por familia (`T`, `V`, `S`,
+`PH`, `GH` y `GT`).
+
+La revisión de compacidad redujo el ejemplo de 518 a 278 líneas y de 20 230 a
+11 081 bytes, sin minificar el código ni retirar pasos del método.
 
 La regresión validada por el backend general es:
 

@@ -24,8 +24,10 @@ Ruta:
 Generación reproducible:
   .\.venv\Scripts\python.exe scripts\export_gurobi.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6 --output entregas\hidroelectrica_restricciones_gurobi.py
 
-Tamaño observado: 20230 bytes
-Líneas observadas: 518
+Tamaño antes de la revisión académica: 20230 bytes
+Tamaño después de la revisión académica: 11081 bytes
+Líneas antes de la revisión académica: 518
+Líneas después de la revisión académica: 278
 Compilación sintáctica: correcta mediante py_compile, compile y ast.parse.
 
 Imports del archivo generado:
@@ -37,11 +39,30 @@ No contiene imports de solver_optimizador, Pyomo, HiGHS ni solve_model. No lee
 el JSON en ejecución. El archivo puede copiarse solo; el PNG se crea junto al
 propio .py.
 
-3. Datos embebidos y formulación
+3. Simplificación y formulación directa
+
+SHA antes de la corrección: ae85c0d8422f143ba81151d00c3ba10f49eb377e.
+
+Se eliminó del entregable el mini-framework que embebía VARIABLES, OBJECTIVES y
+CONSTRAINTS para interpretarlos en tiempo de ejecución. La complejidad de
+compilar el modelo canónico quedó en scripts/export_gurobi.py. El resultado
+contiene sentencias Gurobi directas y visibles:
+
+- periodos = range(1, 5);
+- T, V, S, PH, GH y GT mediante addVars;
+- cotas de T y V en addVars;
+- balances, potencia, conversión y demanda mediante addConstr/addConstrs;
+- Z1 = 100 * quicksum(GT[t]) y Z2 = V[4].
+
+El reconocimiento de familias usa nombres numerados y patrones algebraicos; no
+comprueba el nombre del modelo. Si un patrón no puede compactarse con seguridad,
+el exportador genera addVar/addConstr directos en lugar de otro parser.
+
+4. Datos canónicos y método
 
 - 24 variables continuas no negativas.
-- 28 restricciones canónicas, comparadas registro por registro con el loader
-  oficial que acepta JSON 1.0 y 1.1.
+- 28 restricciones canónicas: 12 restricciones simples se expresan como cotas
+  de variables y las otras 16 como restricciones Gurobi directas.
 - Z1: MIN, Costo de generación térmica, coeficientes 100 para GT1..GT4.
 - Z2: MAX, Volumen final del embalse V4 (UH), coeficiente 1 para V4.
 - PRIMARY_OBJECTIVE = 1.
@@ -60,7 +81,7 @@ propio .py.
 También se comprobó exportación desde JSON 1.1 indexado ya expandido a forma
 canónica y preservación de sentidos MAX/MAX, MIN/MAX, MAX/MIN y MIN/MIN.
 
-4. Regresión numérica esperada
+5. Regresión numérica esperada
 
 La regresión fue ejecutada con el backend oficial Pyomo + HiGHS sobre el mismo
 modelo canónico embebido. No se atribuye esta ejecución a Gurobi.
@@ -84,7 +105,7 @@ Puntos:
 Las siete soluciones son no dominadas dentro del barrido y cumplen
 Z1 = 245.25 * V4 - 3108.75 en los niveles indicados.
 
-5. Disponibilidad de Gurobi
+6. Disponibilidad de Gurobi
 
 Get-Command python y el intérprete explícito resolvieron a:
   E:\AI\solver-optimizador\.venv\Scripts\python.exe
@@ -95,7 +116,7 @@ intérprete explícito. Por ello el archivo fue generado y validado estructural 
 matemáticamente contra el backend oficial, pero NO se ejecutó realmente con
 Gurobi en este entorno. La prueba condicional quedó marcada como skipped.
 
-6. Pruebas
+7. Pruebas
 
 Regresiones específicas:
 - test_epsilon_constraint.py: 25 passed.
@@ -103,20 +124,22 @@ Regresiones específicas:
 - test_solve_model_cli.py: 11 passed.
 - test_pareto_plot_cli.py: 11 passed.
 - test_academic_console_scripts.py: 9 passed.
-- test_gurobi_exporter.py: 20 passed, 1 skipped por ausencia de gurobipy.
+- test_gurobi_exporter.py: 21 passed, 1 skipped por ausencia de gurobipy.
 
 Validación final:
 - compileall de src, scripts, exports, tests y entregas: correcto.
-- suite completa: 346 passed, 0 failed, 1 skipped.
+- suite completa: 347 passed, 0 failed, 1 skipped.
 - warning conocido: .pytest_cache no se puede crear por permisos de Windows.
 
-7. Interpretación y conclusión
+8. Interpretación y conclusión
 
 El exportador deriva el entregable del estado canónico del proyecto; no mantiene
-una segunda formulación hidroeléctrica manual. El proyecto sigue resolviendo con
-Pyomo + HiGHS y Gurobi no fue añadido a pyproject.toml. La ausencia local de
-Gurobi limita la evidencia a validación estructural y comparación con la fuente
-de verdad actual, tal como exige el alcance cuando no hay instalación/licencia.
+una segunda formulación hidroeléctrica manual. La reducción de 518 a 278 líneas
+y de 20230 a 11081 bytes eliminó infraestructura genérica del archivo académico,
+no matemática. El proyecto sigue resolviendo con Pyomo + HiGHS y Gurobi no fue
+añadido a pyproject.toml. La ausencia local de Gurobi limita la evidencia a
+validación estructural y comparación con la fuente de verdad actual, tal como
+exige el alcance cuando no hay instalación/licencia.
 
 No hubo cambios en:
 - src/solver_optimizador/lp_solver.py
