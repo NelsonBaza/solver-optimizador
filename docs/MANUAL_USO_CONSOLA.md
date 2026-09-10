@@ -200,11 +200,18 @@ continua.
 Con dos objetivos, el eje horizontal es Z1 y el vertical Z2. Los puntos rojos
 representan soluciones no dominadas; los puntos dominados, si existen, se
 muestran con otra marca. La línea conecta los puntos no dominados por Z1.
+Esta línea facilita la lectura de las **soluciones obtenidas por el barrido**;
+no afirma que todos los segmentos intermedios sean siempre parte de la
+frontera para cualquier modelo.
 
 Las etiquetas epsilon muestran el identificador (`S1`, `S2`, etc.) y el nivel
 E. Las etiquetas ponderadas muestran el identificador (`A`, `B`, etc.) y los
 valores de `alpha1` que generaron esa solución. Los desplazamientos son
 deterministas.
+
+Los campos opcionales `name` de cada objetivo evitan rótulos redundantes como
+`Z1 — Z1`. El campo opcional `metadata.plot_title` permite un título gráfico
+corto; `metadata.name` conserva el nombre completo mostrado en consola.
 
 No debe interpretarse que “arriba y a la derecha” siempre es mejor: si un
 objetivo es MIN, la dirección preferida es hacia valores menores.

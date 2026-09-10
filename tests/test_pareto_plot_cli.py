@@ -6,8 +6,11 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import solver_optimizador.pareto_plot as plot_module
 
 from solver_optimizador import (
+    build_annotation_layout,
+    build_biobjective_plot_text,
     build_biobjective_problem_from_state,
     deserialize_model,
     prepare_pareto_plot_data,
@@ -39,6 +42,8 @@ def _hydro_problem():
         obj2_sense=state["obj2_sense"],
         obj2_coeffs=state["obj2_coeffs"],
         canonical_constraints=state["constraints_data"],
+        obj1_name=state["objectives"][0]["name"],
+        obj2_name=state["objectives"][1]["name"],
     )
 
 
@@ -54,9 +59,88 @@ def test_datos_epsilon_contienen_siete_puntos_y_etiquetas() -> None:
     assert [point["Z2"] for point in points] == pytest.approx(
         [40, 50, 60, 70, 80, 90, 100]
     )
-    assert points[0]["label"] == "S1\nE=40"
-    assert points[-1]["label"] == "S7\nE=100"
+    assert [point["label"] for point in points] == [
+        f"S{index}\nE={epsilon}"
+        for index, epsilon in enumerate(
+            (40, 50, 60, 70, 80, 90, 100), start=1
+        )
+    ]
     assert all(point["nondominated"] for point in points)
+
+
+def test_textos_descriptivos_titulo_y_leyendas() -> None:
+    problem = _hydro_problem()
+    text = build_biobjective_plot_text(
+        problem, "epsilon", "Generación hidroeléctrica"
+    )
+
+    assert problem.objective1.name == "Costo de generación térmica"
+    assert problem.objective2.name == "Volumen final del embalse V4 (UH)"
+    assert text["xlabel"] == "Z1 — Costo de generación térmica (MIN)"
+    assert text["ylabel"] == "Z2 — Volumen final del embalse V4 (UH) (MAX)"
+    assert text["title"] == (
+        "Frontera de Pareto — Generación hidroeléctrica\n"
+        "Método de las restricciones | Z1 MIN · Z2 MAX"
+    )
+    assert text["nondominated_legend"] == (
+        "Soluciones no dominadas obtenidas"
+    )
+    assert text["dominated_legend"] == "Soluciones dominadas obtenidas"
+
+
+def test_etiqueta_superior_derecha_se_orienta_hacia_el_interior() -> None:
+    result = solve_biobjective_epsilon_constraint(
+        _hydro_problem(), primary_objective=1, r=6
+    )
+    points = prepare_pareto_plot_data(result, "epsilon")
+    layout = build_annotation_layout(points, "Z1", "Z2")
+    upper_right = layout[-1]
+
+    assert upper_right["id"] == "S7"
+    assert upper_right["offset"][0] < 0
+    assert upper_right["offset"][1] < 0
+    assert upper_right["horizontal_alignment"] == "right"
+    assert upper_right["vertical_alignment"] == "top"
+
+
+def test_png_aplica_textos_y_posicion_semantica(
+    tmp_path: Path, monkeypatch
+) -> None:
+    problem = _hydro_problem()
+    result = solve_biobjective_epsilon_constraint(
+        problem, primary_objective=1, r=6
+    )
+    captured = {}
+    original_subplots = plot_module.plt.subplots
+    original_close = plot_module.plt.close
+
+    def capture_subplots(*args, **kwargs):
+        figure, axis = original_subplots(*args, **kwargs)
+        captured["figure"] = figure
+        captured["axis"] = axis
+        return figure, axis
+
+    monkeypatch.setattr(plot_module.plt, "subplots", capture_subplots)
+    monkeypatch.setattr(plot_module.plt, "close", lambda figure: None)
+    output = tmp_path / "pareto.png"
+    plot_module.save_pareto_plot(
+        problem, result, "epsilon", "Generación hidroeléctrica", output
+    )
+
+    axis = captured["axis"]
+    assert axis.get_title().startswith(
+        "Frontera de Pareto — Generación hidroeléctrica"
+    )
+    assert axis.get_xlabel() == "Z1 — Costo de generación térmica (MIN)"
+    assert axis.get_ylabel() == "Z2 — Volumen final del embalse V4 (UH) (MAX)"
+    assert "Soluciones no dominadas obtenidas" in (
+        axis.get_legend_handles_labels()[1]
+    )
+    s7_annotation = next(text for text in axis.texts if text.get_text() == "S7\nE=100")
+    assert s7_annotation.get_position()[0] < 0
+    assert s7_annotation.get_position()[1] < 0
+    assert output.stat().st_size > 10_000
+    original_close(captured["figure"])
 
 
 def test_png_se_crea_con_nombre_esperado_y_no_esta_vacio(tmp_path: Path) -> None:
@@ -87,6 +171,8 @@ def test_etiquetas_ponderadas_incluyen_id_y_alpha1() -> None:
 def test_png_ponderado_tambien_se_genera(tmp_path: Path) -> None:
     problem = _hydro_problem()
     result = solve_biobjective_weighted(problem, num_combinations=6)
+    points_before_plot = prepare_pareto_plot_data(result, "weighted")
+    layout = build_annotation_layout(points_before_plot, "Z1", "Z2")
     output = tmp_path / "hidroelectrica_biobjetivo_weighted_pareto.png"
     saved, points = save_pareto_plot(
         problem,
@@ -98,6 +184,27 @@ def test_png_ponderado_tambien_se_genera(tmp_path: Path) -> None:
     assert saved == output
     assert saved.stat().st_size > 10_000
     assert len(points) == len(result.unique_solutions)
+    assert "Método de ponderaciones normalizadas" in (
+        build_biobjective_plot_text(problem, "weighted", "Modelo")["title"]
+    )
+    repeated_positions = [
+        position["offset"]
+        for point, position in zip(points_before_plot, layout)
+        if point["Z1"] == pytest.approx(21416.25)
+        and point["Z2"] == pytest.approx(100.0)
+    ]
+    assert len(repeated_positions) == len(set(repeated_positions))
+
+
+def test_runner_usa_titulo_corto_sin_perder_nombre_completo() -> None:
+    runner = _runner_module()
+    state = deserialize_model(HYDRO.read_text(encoding="utf-8"))
+    full_name = state["metadata"]["name"]
+
+    assert "Biobjetivo Corregida" in full_name
+    assert runner._plot_display_name(state, full_name) == (
+        "Generación hidroeléctrica"
+    )
 
 
 def test_runner_genera_png_por_defecto(tmp_path: Path, monkeypatch, capsys) -> None:

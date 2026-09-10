@@ -103,6 +103,8 @@ from .plotting import (
     plot_multiobjective_runs,
 )
 from .pareto_plot import (
+    build_annotation_layout,
+    build_biobjective_plot_text,
     prepare_pareto_plot_data,
     save_multiobjective_projection_plots,
     save_pareto_plot,
@@ -141,6 +143,8 @@ __all__ = [
     "plot_variable_values",
     "plot_constraint_slacks",
     "plot_multiobjective_runs",
+    "build_annotation_layout",
+    "build_biobjective_plot_text",
     "prepare_pareto_plot_data",
     "save_multiobjective_projection_plots",
     "save_pareto_plot",

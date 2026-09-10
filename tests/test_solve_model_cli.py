@@ -60,6 +60,11 @@ def test_hydroelectric_json_loads_with_expected_shape(loaded_model: dict) -> Non
     assert loaded_model["num_vars"] == 24
     assert len(loaded_model["var_names"]) == 24
     assert len(loaded_model["constraints_data"]) == 28
+    assert loaded_model["metadata"]["plot_title"] == "Generación hidroeléctrica"
+    assert [objective["name"] for objective in loaded_model["objectives"]] == [
+        "Costo de generación térmica",
+        "Volumen final del embalse V4 (UH)",
+    ]
 
 
 def test_hydroelectric_json_is_sparse(raw_model: dict) -> None:

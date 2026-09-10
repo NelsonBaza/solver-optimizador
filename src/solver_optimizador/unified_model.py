@@ -532,6 +532,7 @@ def compile_unified_model_document(document: Mapping[str, Any]) -> dict[str, Any
             "name": str(metadata.get("name", "Modelo unificado")).strip()
             or "Modelo unificado",
             "description": str(metadata.get("description", "")).strip(),
+            "plot_title": str(metadata.get("plot_title", "")).strip(),
         },
         "problem_type": problem_type,
         "objectives": compiled_objectives,

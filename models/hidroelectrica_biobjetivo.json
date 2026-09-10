@@ -2,6 +2,7 @@
   "schema_version": "1.0",
   "metadata": {
     "name": "Generación Hidroeléctrica Biobjetivo Corregida - 4 Períodos",
+    "plot_title": "Generación hidroeléctrica",
     "description": "Modelo lineal biobjetivo de generación hidrotérmica en cuatro períodos, con 24 variables y 28 restricciones originales.",
     "created_with": "solver-optimizador"
   },
@@ -36,6 +37,7 @@
     ],
     "bio_objectives": {
       "obj1": {
+        "name": "Costo de generación térmica",
         "sense": "Minimizar",
         "coefficients": {
           "GT1": 100.0,
@@ -45,6 +47,7 @@
         }
       },
       "obj2": {
+        "name": "Volumen final del embalse V4 (UH)",
         "sense": "Maximizar",
         "coefficients": {
           "V4": 1.0

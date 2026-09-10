@@ -405,6 +405,7 @@ def deserialize_model(json_str: str) -> Dict[str, Any]:
         "metadata": {
             "name": meta_name,
             "description": str(metadata.get("description", "")).strip(),
+            "plot_title": str(metadata.get("plot_title", "")).strip(),
         },
         "problem_type": prob_type,
         "num_vars": len(var_names),

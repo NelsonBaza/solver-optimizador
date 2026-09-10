@@ -28,6 +28,9 @@ recibe el `problem_builder`; el solver no distingue el origen de cada fila.
 
 El modelo no está codificado dentro del script. El nombre, las variables, los
 objetivos y las restricciones proceden del archivo entregado como argumento.
+Un objetivo puede declarar `name` para mostrar un eje descriptivo y
+`metadata.plot_title` puede definir un título gráfico corto. El nombre completo
+de `metadata.name` siempre se conserva en la salida de consola.
 
 ## Uso interactivo recomendado
 

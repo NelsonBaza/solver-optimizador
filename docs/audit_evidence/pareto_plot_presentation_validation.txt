@@ -1,0 +1,99 @@
+VALIDACION DE PRESENTACION DE GRAFICOS DE PARETO
+Fecha: 2026-09-09
+Repositorio: NelsonBaza/solver-optimizador
+Rama de trabajo: fix/pareto-plot-presentation
+SHA base: c28bc321b6a0bfcb2235073d4f65037fbe96f77d
+
+1. Evidencia observada de integracion
+
+- main inicial: 370cd17271632ec4842ea24befa8ea0e6667ff6a
+- rama integrada: feat/interactive-multiobjective-epsilon
+- commit integrado: c28bc321b6a0bfcb2235073d4f65037fbe96f77d
+- relacion comprobada antes del fast-forward: 1 commit adelante, 0 detras;
+  el padre de c28bc321 era 370cd172.
+- suite anterior a la integracion: 322 passed, 0 failed.
+- suite posterior a la integracion: 322 passed, 0 failed.
+- main fue enviado a origin/main en c28bc321.
+
+2. Cambios de presentacion comprobados
+
+- Nombre corto del grafico: Generacion hidroelectrica.
+- Eje X: Z1 - Costo de generacion termica (MIN).
+- Eje Y: Z2 - Volumen final del embalse V4 (UH) (MAX).
+- Leyenda: Soluciones no dominadas obtenidas.
+- Titulo epsilon: Frontera de Pareto - Generacion hidroelectrica / Metodo de
+  las restricciones | Z1 MIN · Z2 MAX.
+- Las etiquetas epsilon conservan S1/E=40, ..., S7/E=100.
+- El desplazamiento se calcula de forma determinista segun la cercania a los
+  cuatro bordes. S7/E=100 se desplaza hacia abajo y hacia la izquierda.
+- Las soluciones con coordenadas graficas coincidentes reciben separacion
+  determinista adicional, aplicada tambien al grafico ponderado.
+- La linea entre puntos no dominados se conserva. Se documenta como conexion
+  visual de las soluciones obtenidas por el barrido, sin afirmar que cada
+  segmento sea siempre la frontera continua de cualquier modelo.
+- Las proyecciones de 3 o mas objetivos conservan el titulo "Proyeccion de
+  soluciones multiobjetivo" y la dominancia global N-dimensional.
+
+3. Regresion numerica hidroelectrica
+
+Comando:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6
+
+Niveles E2: [40, 50, 60, 70, 80, 90, 100]
+
+Puntos obtenidos (Z1, Z2):
+  (6701.25, 40)
+  (9153.75, 50)
+  (11606.25, 60)
+  (14058.75, 70)
+  (16511.25, 80)
+  (18963.75, 90)
+  (21416.25, 100)
+
+Las siete soluciones fueron clasificadas como no dominadas dentro del barrido.
+Se conserva la relacion conocida Z1 = 245.25 * V4 - 3108.75 para los siete
+niveles entre V4=40 y V4=100.
+
+Comando ponderado:
+  .\.venv\Scripts\python.exe scripts\solve_model.py models\hidroelectrica_biobjetivo.json --method weighted --num-weights 6
+
+La matriz de pagos y los resultados ponderados no cambiaron: extremos
+(6701.25, 40) y (21416.25, 100), con 6 corridas y 4 soluciones unicas.
+
+4. Archivos graficos e inspeccion visual
+
+- results/hidroelectrica_biobjetivo_epsilon_pareto.png (117633 bytes)
+- results/hidroelectrica_biobjetivo_weighted_pareto.png (113981 bytes)
+
+Ambos PNG se abrieron e inspeccionaron visualmente. El titulo esta completo,
+los nombres de ejes son legibles, la leyenda no oculta puntos, las etiquetas
+no aparecen cortadas y S7/E=100 esta orientada hacia el interior. En el grafico
+ponderado, las etiquetas de soluciones con iguales coordenadas se separan de
+forma determinista.
+
+5. Validacion automatica
+
+- compileall: correcto.
+- epsilon_constraint: 25 passed.
+- weighted_method: 20 passed.
+- solve_model_cli: 11 passed.
+- academic_console_scripts: 9 passed.
+- unified_model: 22 passed.
+- pareto_plot_cli: 11 passed.
+- multiobjective_epsilon: 19 passed.
+- suite completa final: 326 passed, 0 failed, 1 warning conocido de
+  .pytest_cache por permisos de Windows.
+
+6. Interpretacion y conclusion
+
+Los cambios afectan exclusivamente metadatos descriptivos, composicion textual
+y ubicacion visual de anotaciones. No se modificaron coeficientes, restricciones,
+algoritmos de optimizacion ni clasificacion matematica. Los valores observados
+coinciden con la regresion hidroelectrica aprobada y con los motores existentes.
+
+No hubo cambios en:
+- streamlit_app.py
+- exports/metodo_restricciones.py
+- exports/metodo_ponderaciones.py
+- src/solver_optimizador/epsilon_constraint.py
+- src/solver_optimizador/multiobjective.py

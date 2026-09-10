@@ -116,8 +116,8 @@ def load_biobjective_model(
         obj2_sense=loaded["obj2_sense"],
         obj2_coeffs=loaded["obj2_coeffs"],
         canonical_constraints=loaded["constraints_data"],
-        obj1_name="Z1",
-        obj2_name="Z2",
+        obj1_name=loaded["objectives"][0]["name"],
+        obj2_name=loaded["objectives"][1]["name"],
     )
     model_name = loaded["metadata"]["name"]
     return model_name, loaded, problem
@@ -826,6 +826,15 @@ def _plot_path(model_file: Path, method: str) -> Path:
     return PROJECT_ROOT / "results" / f"{model_file.stem}_{method}_pareto.png"
 
 
+def _plot_display_name(loaded: Mapping[str, Any], model_name: str) -> str:
+    metadata = loaded.get("metadata", {})
+    if isinstance(metadata, Mapping):
+        configured = str(metadata.get("plot_title", "")).strip()
+        if configured:
+            return configured
+    return model_name
+
+
 def run(
     args: argparse.Namespace,
     input_func: Callable[[str], str] | None = None,
@@ -909,7 +918,7 @@ def run(
                 problem=biobjective,
                 result=result,
                 method=method,
-                model_name=model_name,
+                model_name=_plot_display_name(loaded, model_name),
                 output_path=_plot_path(args.model_file, method),
             )
             print(f"\nGráfico de Pareto guardado en:\n{output}")
@@ -918,7 +927,7 @@ def run(
             projections = save_multiobjective_projection_plots(
                 problem=problem,
                 result=result,
-                model_name=model_name,
+                model_name=_plot_display_name(loaded, model_name),
                 output_directory=PROJECT_ROOT / "results",
                 model_stem=args.model_file.stem,
             )
