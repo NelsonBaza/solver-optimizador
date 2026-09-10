@@ -1,0 +1,132 @@
+VALIDACIÓN DEL EXPORTADOR ACADÉMICO GUROBI
+Fecha: 2026-09-09
+Repositorio: NelsonBaza/solver-optimizador
+Rama: feat/gurobi-academic-exporter
+SHA base: ff26875c30e6c63cc05df58c5f4eb5c6b52827e7
+
+1. Integración previa observada
+
+- main antes de integrar: c28bc321b6a0bfcb2235073d4f65037fbe96f77d
+- rama auditada: fix/pareto-plot-presentation
+- commit integrado: ff26875c30e6c63cc05df58c5f4eb5c6b52827e7
+- relación confirmada: 1 commit adelante, 0 detrás y padre ff26875 = c28bc321.
+- preintegración: 326 passed, 0 failed.
+- integración: fast-forward, debido a que el ejecutable gh instalado no pudo
+  iniciarse por acceso denegado.
+- postintegración: compileall correcto; 326 passed, 0 failed.
+- push de main: exitoso; origin/main quedó en ff26875.
+
+2. Artefacto generado
+
+Ruta:
+  entregas/hidroelectrica_restricciones_gurobi.py
+
+Generación reproducible:
+  .\.venv\Scripts\python.exe scripts\export_gurobi.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6 --output entregas\hidroelectrica_restricciones_gurobi.py
+
+Tamaño observado: 20230 bytes
+Líneas observadas: 518
+Compilación sintáctica: correcta mediante py_compile, compile y ast.parse.
+
+Imports del archivo generado:
+- gurobipy
+- matplotlib
+- __future__, pathlib, sys y time de la biblioteca estándar
+
+No contiene imports de solver_optimizador, Pyomo, HiGHS ni solve_model. No lee
+el JSON en ejecución. El archivo puede copiarse solo; el PNG se crea junto al
+propio .py.
+
+3. Datos embebidos y formulación
+
+- 24 variables continuas no negativas.
+- 28 restricciones canónicas, comparadas registro por registro con el loader
+  oficial que acepta JSON 1.0 y 1.1.
+- Z1: MIN, Costo de generación térmica, coeficientes 100 para GT1..GT4.
+- Z2: MAX, Volumen final del embalse V4 (UH), coeficiente 1 para V4.
+- PRIMARY_OBJECTIVE = 1.
+- R = 6.
+- SHOW_GUROBI_LOG = False.
+- Matriz de pagos calculada por optimizaciones Gurobi reales al ejecutar el
+  entregable, con desempate secundario y objetivo primario fijado exactamente.
+- No usa setObjectiveN.
+- Niveles calculados mediante E_t = Z_min + (t/r)(Z_max - Z_min).
+- Cada nivel construye un gp.Model nuevo, agrega >= para MAX o <= para MIN,
+  ejecuta setObjective y optimize, y registra estados sin acumular epsilons.
+- Clasificación Pareto con sentidos MAX/MIN y valores Z1/Z2 reconstruidos desde
+  el mismo vector x.
+- Gráfico Matplotlib headless con los textos y offsets de borde aprobados.
+
+También se comprobó exportación desde JSON 1.1 indexado ya expandido a forma
+canónica y preservación de sentidos MAX/MAX, MIN/MAX, MAX/MIN y MIN/MIN.
+
+4. Regresión numérica esperada
+
+La regresión fue ejecutada con el backend oficial Pyomo + HiGHS sobre el mismo
+modelo canónico embebido. No se atribuye esta ejecución a Gurobi.
+
+Matriz de pagos:
+  opt_Z1 = (6701.25, 40)
+  opt_Z2 = (21416.25, 100)
+
+Niveles E2:
+  [40, 50, 60, 70, 80, 90, 100]
+
+Puntos:
+  (6701.25, 40)
+  (9153.75, 50)
+  (11606.25, 60)
+  (14058.75, 70)
+  (16511.25, 80)
+  (18963.75, 90)
+  (21416.25, 100)
+
+Las siete soluciones son no dominadas dentro del barrido y cumplen
+Z1 = 245.25 * V4 - 3108.75 en los niveles indicados.
+
+5. Disponibilidad de Gurobi
+
+Get-Command python y el intérprete explícito resolvieron a:
+  E:\AI\solver-optimizador\.venv\Scripts\python.exe
+
+Versión de Python: 3.13.1.
+importlib.util.find_spec("gurobipy") devolvió None tanto con python como con el
+intérprete explícito. Por ello el archivo fue generado y validado estructural y
+matemáticamente contra el backend oficial, pero NO se ejecutó realmente con
+Gurobi en este entorno. La prueba condicional quedó marcada como skipped.
+
+6. Pruebas
+
+Regresiones específicas:
+- test_epsilon_constraint.py: 25 passed.
+- test_multiobjective_epsilon.py: 19 passed.
+- test_solve_model_cli.py: 11 passed.
+- test_pareto_plot_cli.py: 11 passed.
+- test_academic_console_scripts.py: 9 passed.
+- test_gurobi_exporter.py: 20 passed, 1 skipped por ausencia de gurobipy.
+
+Validación final:
+- compileall de src, scripts, exports, tests y entregas: correcto.
+- suite completa: 346 passed, 0 failed, 1 skipped.
+- warning conocido: .pytest_cache no se puede crear por permisos de Windows.
+
+7. Interpretación y conclusión
+
+El exportador deriva el entregable del estado canónico del proyecto; no mantiene
+una segunda formulación hidroeléctrica manual. El proyecto sigue resolviendo con
+Pyomo + HiGHS y Gurobi no fue añadido a pyproject.toml. La ausencia local de
+Gurobi limita la evidencia a validación estructural y comparación con la fuente
+de verdad actual, tal como exige el alcance cuando no hay instalación/licencia.
+
+No hubo cambios en:
+- src/solver_optimizador/lp_solver.py
+- src/solver_optimizador/epsilon_constraint.py
+- src/solver_optimizador/multiobjective.py
+- src/solver_optimizador/multiobjective_epsilon.py
+- exports/metodo_restricciones.py
+- exports/metodo_ponderaciones.py
+- streamlit_app.py
+- pyproject.toml
+
+El archivo ajeno models/planeacion_agregada_biobjetivo.json apareció como no
+versionado durante el trabajo y se dejó intacto y fuera del commit.

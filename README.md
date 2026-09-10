@@ -157,6 +157,20 @@ repositorio:
 Cada archivo puede copiarse fuera del repositorio junto con un JSON de esquema
 1.0. Consulte [`docs/SCRIPTS_ACADEMICOS_CONSOLA.md`](docs/SCRIPTS_ACADEMICOS_CONSOLA.md).
 
+### Exportación académica a Gurobi
+
+De forma adicional, un modelo biobjetivo JSON 1.0 o 1.1 puede convertirse en un
+único programa Gurobi autocontenido del método epsilon-constraint:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\export_gurobi.py models\hidroelectrica_biobjetivo.json --method epsilon --primary 1 --r 6 --output entregas\hidroelectrica_restricciones_gurobi.py
+```
+
+La generación no requiere `gurobipy`; su ejecución posterior sí requiere
+Gurobi, una licencia válida y Matplotlib. El backend general continúa siendo
+Pyomo + HiGHS. Consulte
+[`docs/EXPORTACION_GUROBI_ACADEMICA.md`](docs/EXPORTACION_GUROBI_ACADEMICA.md).
+
 ---
 
 ## 📦 Estructura del Código
@@ -228,6 +242,7 @@ Para ejecutar la suite de pruebas del motor matemático:
 * [`docs/EJECUTOR_MODELOS_CONSOLA.md`](docs/EJECUTOR_MODELOS_CONSOLA.md): Carga y resolución general de modelos JSON desde consola.
 * [`docs/MANUAL_USO_CONSOLA.md`](docs/MANUAL_USO_CONSOLA.md): Manual para preparar JSON, resolver y leer tablas y gráficos.
 * [`docs/SCRIPTS_ACADEMICOS_CONSOLA.md`](docs/SCRIPTS_ACADEMICOS_CONSOLA.md): Entrega, dependencias, formato y uso de los dos scripts académicos portables.
+* [`docs/EXPORTACION_GUROBI_ACADEMICA.md`](docs/EXPORTACION_GUROBI_ACADEMICA.md): Generación y ejecución de entregables Gurobi autocontenidos para epsilon-constraint.
 * [`docs/ENTRADA_ESCALABLE_MODELOS.md`](docs/ENTRADA_ESCALABLE_MODELOS.md): Formatos ancho/disperso, CSV/XLSX y aplicación atómica de modelos grandes.
 * [`docs/MODELADO_INDEXADO.md`](docs/MODELADO_INDEXADO.md): Conjuntos, parámetros, familias, sintaxis segura, expansión y trazabilidad.
 * [`docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md`](docs/LEXICOGRAPHIC_PAYOFF_MATRIX.md): Documento histórico sobre la selección secundaria de anclas; no define el método vigente.
